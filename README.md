@@ -72,6 +72,7 @@ The Desk's command bar turns typed text into a proposal card. When the person co
 | Command | Kind | Creates |
 |---|---|---|
 | `dist/desk-calendar-mac --create [--calendar <name>]` | `calendar` | an event in macOS Calendar, through EventKit |
+| `desk-calendar-create [--calendar <name>]` | `calendar` | the same event, but refuses a calendar name that more than one calendar carries |
 | `dist/desk-reminders-mac [--list <name>]` | `reminder` | a reminder with an alarm in Apple Reminders, through EventKit |
 | `desk-task [--map <ref>]... [--autonomy approve] [--kind research] [--soma soma]` | `task` | a node on a work-graph map, through `soma graph add` |
 | `desk-goal [--soma soma]` | `goal` | a draft Soma goal, through `soma goal add` |
@@ -116,6 +117,7 @@ Deploy this adapter update before the corresponding Cortex Catch-up update. Exis
 ### The commands
 
 - **`desk-calendar-mac --create`** reads the request after its relaunch, so a refused request never touches the calendar. It refuses a request without a request id. It saves to the default calendar for new events, or to `--calendar <name>` (an unknown or read-only calendar is refused), with span `.thisEvent`, and puts `desk:request <requestId>` as the last line of the event's notes. Before saving, it looks in the target calendar from the day before the start to a day after the end for an event whose notes hold that line; if it finds one, it saves nothing and reports that event as already there. The `id` is the event's `eventIdentifier`. An event without `end` lasts an hour; an all-day event without `end` lasts one day. It uses the same calendar grant as reading (full access).
+- **`desk-calendar-create`** runs `dist/desk-calendar-mac --create` and passes its answer or refusal on. With `--calendar <name>` it first lists the calendars through `dist/desk-calendar-availability-v1 --days 1` (read-only) and refuses, writing nothing, when no calendar or more than one calendar carries that name; `desk-calendar-mac` alone takes the first writable match. It counts every calendar of that name, writable or not. Without `--calendar` it hands the request to the default calendar unchanged. `--writer` and `--reader` point at other binaries.
 - **`desk-reminders-mac`** is a separate binary with its own signature, so its Reminders grant and the calendar grant of `desk-calendar-mac` never disturb each other. Build it with `./mac/build-reminders.sh`, which builds nothing else. Like `desk-calendar-mac`, it re-launches itself with responsibility disclaimed and reads the request only after that, and it checks the whole request before any Reminders access. It refuses a request without a request id, without `text`, or whose `due` is not an ISO 8601 date and time. It saves to the default Reminders list, or to `--list <name>` (an unknown or read-only list is refused with exit 4). The reminder gets the text as its title, a due date, an alarm at the due time, and `desk:request <requestId>` as the last line of its notes. Before saving, it looks through the target list (open reminders, and those completed in the last seven days) for a reminder whose notes end with that line; if it finds one, it saves nothing and reports that reminder as already there. The `id` is the reminder's `calendarItemIdentifier`. Without full Reminders access it exits 3. The first run asks for access, so run it once by hand and allow it before Cortex uses it:
 
   ```sh
@@ -212,8 +214,13 @@ mc:
     mail:
       invitations:
         command: [/path/to/cortex-desk-adapters/bin/desk-mail-invite.ts]
-        addToCalendar: [personal]
+        calendarWriter: [/path/to/cortex-desk-adapters/bin/desk-calendar-create.ts]
+        addToCalendar:
+          - account: personal
+            calendar: Privat
 ```
+
+An `addToCalendar` entry is an account name (the event goes to the calendar writer's default calendar) or `{ account, calendar }`: Cortex then runs the writer with `--calendar <calendar>` appended. `calendarWriter` is the writer for accepted invitations; without it Cortex uses `mc.desk.ask.writers.calendar`.
 
 ### DMARC reports
 

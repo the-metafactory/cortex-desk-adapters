@@ -6,6 +6,7 @@
   "description": "Source adapters, writers, a parser and a mail classifier for the Cortex Desk: commands that print or create Desk JSON.",
   "bin": {
     "desk-calendar": "bin/desk-calendar.ts",
+    "desk-calendar-create": "bin/desk-calendar-create.ts",
     "desk-mail": "bin/desk-mail.ts",
     "desk-mail-move": "bin/desk-mail-move.ts",
     "desk-mail-trash": "bin/desk-mail-trash.ts",
