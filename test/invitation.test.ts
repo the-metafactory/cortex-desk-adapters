@@ -195,3 +195,13 @@ describe("answerInvitation", () => {
     });
   });
 });
+
+describe("review round 1", () => {
+  test("an ASCII display name with a comma is quoted in From", () => {
+    const msg = replyMessage({ from: "pat@example.com", fromName: "Principal, Pat", to: "o@example.org", reply: "accept", summary: "S", ics: "", inReplyTo: "a@b", messageId: "c@d", boundary: "b", date: new Date(0) });
+    expect(msg).toContain('From: "Principal, Pat" <pat@example.com>\r\n');
+  });
+  test("a time zone the Desk cannot resolve drops the invitation instead of guessing its time", () => {
+    expect(parseInvitation(REQUEST.replaceAll("W. Europe Standard Time", "Tokyo Standard Time"), SELF)).toBeNull();
+  });
+});

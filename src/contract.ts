@@ -276,10 +276,6 @@ export interface DeskMailDraftRequest {
 }
 
 /**
- * The Desk report contract: Cortex writes this to the `mc.desk.mail.report.command` command's stdin for Report. The
- * command saves a draft to `to` with the original attached as message/rfc822, for the principal to send. It never sends.
- */
-/**
  * The Desk invitation-reply contract: Cortex writes this to the `mc.desk.mail.invitations.command` command's stdin after
  * the person confirmed the answer. The command sends the iTIP REPLY to the organizer. `uid` is the invitation's UID as the
  * mail source reported it; the command refuses when the mail's invitation has another.
@@ -294,6 +290,10 @@ export interface DeskInviteReplyRequest {
   requestId: string;
 }
 
+/**
+ * The Desk report contract: Cortex writes this to the `mc.desk.mail.report.command` command's stdin for Report. The
+ * command saves a draft to `to` with the original attached as message/rfc822, for the principal to send. It never sends.
+ */
 export interface DeskMailReportRequest {
   action: "report";
   account: string;

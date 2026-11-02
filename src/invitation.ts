@@ -68,20 +68,19 @@ function components(ics: string): { method?: string; items: Component[] } {
   return { ...(method ? { method } : {}), items };
 }
 
-/** The properties of the component itself, not of a nested VALARM. */
-function ownProperties(component: Component): IcsProperty[] {
-  const out: IcsProperty[] = [];
+/** The content lines of the component itself, not of a nested VALARM. */
+function ownLines(component: Component): string[] {
+  const out: string[] = [];
   let depth = 0;
   for (const line of component.lines) {
     if (/^BEGIN:/i.test(line)) depth += 1;
     else if (/^END:/i.test(line)) depth -= 1;
-    else if (depth === 1) {
-      const prop = parseProperty(line);
-      if (prop) out.push(prop);
-    }
+    else if (depth === 1) out.push(line);
   }
   return out;
 }
+
+const ownProperties = (component: Component): IcsProperty[] => ownLines(component).flatMap((line) => parseProperty(line) ?? []);
 
 const mailto = (value: string): string | null => {
   const address = value.trim().replace(/^mailto:/i, "").trim().toLowerCase();
@@ -198,14 +197,7 @@ export function buildReply(ics: string, input: { attendee: string; reply: DeskIn
   const event = masterEvent(items);
   if (!event) throw new Refusal("The invitation holds no event.");
   const self = input.attendee.toLowerCase();
-  const raw = event.lines.slice(1, -1);
-  let depth = 0;
-  const own = raw.filter((line) => {
-    if (/^BEGIN:/i.test(line)) depth += 1;
-    const keep = depth === 0;
-    if (/^END:/i.test(line)) depth -= 1;
-    return keep;
-  });
+  const own = ownLines(event);
   const named = (line: string): string => parseProperty(line)?.name ?? "";
   const me = own.find((line) => named(line) === "ATTENDEE" && mailto(parseProperty(line)?.value ?? "") === self);
   if (!me) throw new Refusal("You are not listed as an attendee of this invitation, so the Desk does not answer it.");
@@ -259,7 +251,8 @@ const WORD: Record<DeskInviteReplyRequest["reply"], { subject: string; text: str
 export function replyMessage(input: ReplyMessageInput): string {
   const word = WORD[input.reply];
   const who = input.fromName ? `${input.fromName} (${input.from})` : input.from;
-  const sender = input.fromName ? `${headerWord(input.fromName.replace(/["\\]/g, ""))} <${input.from}>` : input.from;
+  const name = input.fromName?.replace(/["\\]/g, "");
+  const sender = name ? `${asciiOnly(name) ? `"${name}"` : headerWord(name)} <${input.from}>` : input.from;
   return [
     `From: ${sender}`,
     `To: ${input.to}`,
@@ -304,13 +297,13 @@ export function readInviteReplyRequest(text: string): DeskInviteReplyRequest {
   return { action: "invite-reply", account, messageId: bare(messageId), uid, reply, requestId };
 }
 
-/** The first text/calendar part of a body structure (an application/ics attachment if there is none), or undefined. */
 export interface CalendarPartNode {
   part?: string;
   type?: string;
   childNodes?: CalendarPartNode[];
 }
 
+/** The first text/calendar part of a body structure (an application/ics attachment if there is none), or undefined. */
 export function calendarPart(node: CalendarPartNode | undefined): string | undefined {
   const leaves = (n: CalendarPartNode | undefined): CalendarPartNode[] => (!n ? [] : n.childNodes?.length ? n.childNodes.flatMap(leaves) : [n]);
   const all = leaves(node);

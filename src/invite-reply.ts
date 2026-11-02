@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { DeskInviteReplyRequest, DeskWriteResult } from "./contract";
 import { buildReply, parseInvitation, replyMessage } from "./invitation";
 import type { SmtpAccount } from "./smtp";
-import { readLedger, writeLedger } from "./tana";
+import { readLedger, writeLedger } from "./ledger";
 import { Refusal } from "./writers";
 
 export const inviteLedgerPath = (env: Record<string, string | undefined> = process.env): string =>
