@@ -4,6 +4,8 @@
  */
 
 export interface DeskSourceEvent {
+  availability?: { status: "busy" | "free" | "unknown"; provenance: string };
+  calendarId?: string;
   /** Stable within the source, e.g. the calendar's event id or date+title. */
   id: string;
   /** ISO 8601 start. For an all-day event, the day at 00:00 local time. */
@@ -58,6 +60,14 @@ export interface DeskMailHeaders {
 }
 
 export interface DeskSourceOutput {
+  capabilities?: ("calendar" | "attention")[];
+  calendarCoverage?: {
+    from: string;
+    to: string;
+    calendars: { id: string; name: string }[];
+    status: "complete" | "partial";
+    provenance: string;
+  };
   events?: DeskSourceEvent[];
   items?: DeskSourceMail[];
 }

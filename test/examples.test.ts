@@ -13,7 +13,7 @@ describe("desk-ics", () => {
   it("reads a UTC event, unfolds lines and unescapes text", () => {
     const text = cal(["UID:a", "DTSTART:20261102T130000Z", "DTEND:20261102T140000Z", "SUMMARY:Budget\\, part ", " two", "LOCATION:Room 1", "URL:https://meet.example.org/x"]);
     expect(parseIcs(text, window("2026-11-02T00:00:00Z", 1)).events).toEqual([
-      { id: "a", start: "2026-11-02T13:00:00.000Z", end: "2026-11-02T14:00:00.000Z", title: "Budget, part two", location: "Room 1", url: "https://meet.example.org/x" },
+      { id: "a", start: "2026-11-02T13:00:00.000Z", end: "2026-11-02T14:00:00.000Z", availability: { status: "unknown", provenance: "RFC5545.TRANSP.UNKNOWN" }, title: "Budget, part two", location: "Room 1", url: "https://meet.example.org/x" },
     ]);
   });
 
@@ -69,13 +69,13 @@ describe("desk-ics", () => {
     const text = cal(["UID:daily", "DTSTART:20261102T090000Z", "RRULE:FREQ=DAILY;BYDAY=MO,WE", "SUMMARY:Daily"]);
     expect(parseIcs(text, window("2026-11-02T00:00:00Z", 3)).events).toHaveLength(2);
     for (const bad of ["FREQ=DAILY;INTERVAL=0", "FREQ=DAILY;COUNT=no", "FREQ=WEEKLY;WKST=SU", "FREQ=DAILY;UNTIL=nonsense"]) {
-      expect(parseIcs(cal(["DTSTART:20261102T090000Z", `RRULE:${bad}`, "SUMMARY:Bad"]), window("2026-11-02T00:00:00Z", 3))).toEqual({ events: [], skipped: 1 });
+      expect(parseIcs(cal(["DTSTART:20261102T090000Z", `RRULE:${bad}`, "SUMMARY:Bad"]), window("2026-11-02T00:00:00Z", 3))).toEqual({ events: [], skipped: 1, complete: false });
     }
   });
 
   it("rejects invalid dates and unknown time zones", () => {
     for (const time of ["DTSTART:20261301T090000Z", "DTSTART:20260230T090000Z", "DTSTART;TZID=Unknown/Zone:20261102T090000"]) {
-      expect(parseIcs(cal([time, "SUMMARY:Bad"]), window("2026-11-02T00:00:00Z", 3))).toEqual({ events: [], skipped: 1 });
+      expect(parseIcs(cal([time, "SUMMARY:Bad"]), window("2026-11-02T00:00:00Z", 3))).toEqual({ events: [], skipped: 1, complete: false });
     }
   });
 
@@ -101,7 +101,7 @@ describe("desk-ics", () => {
 
   it("counts an event it cannot read instead of guessing", () => {
     const text = cal(["UID:m", "DTSTART:20261101T090000Z", "RRULE:FREQ=MONTHLY", "SUMMARY:Monthly"], ["UID:n", "SUMMARY:No start"]);
-    expect(parseIcs(text, window("2026-11-01T00:00:00Z", 3))).toEqual({ events: [], skipped: 2 });
+    expect(parseIcs(text, window("2026-11-01T00:00:00Z", 3))).toEqual({ events: [], skipped: 2, complete: false });
   });
 
   it("refuses a link other than https and a missing file", async () => {

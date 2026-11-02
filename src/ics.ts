@@ -34,6 +34,7 @@ export interface IcsWindow {
 export interface IcsResult {
   events: DeskSourceEvent[];
   skipped: number;
+  complete: boolean;
 }
 
 export function unfold(text: string): string[] {
@@ -189,27 +190,36 @@ export function parseIcs(text: string, window: IcsWindow): IcsResult {
   const events: DeskSourceEvent[] = [];
   let skipped = 0;
   let current: IcsProperty[] | null = null;
+  let malformed = false;
   for (const line of unfold(text)) {
-    if (/^BEGIN:VEVENT$/i.test(line)) current = [];
+    const component = /^BEGIN:(.+)$/i.exec(line)?.[1]?.toUpperCase();
+    if (component && !["VCALENDAR", "VEVENT", "VALARM", "VTIMEZONE", "STANDARD", "DAYLIGHT"].includes(component)) malformed = true;
+    if (/^BEGIN:VEVENT$/i.test(line)) { if (current) malformed = true; current = []; }
     else if (/^END:VEVENT$/i.test(line)) {
       if (current) {
         const built = buildEvents(current, window);
         if (built === null) skipped += 1;
         else events.push(...built);
       }
+      else malformed = true;
       current = null;
     } else if (current) {
       const prop = parseProperty(line);
       if (prop) current.push(prop);
+      else malformed = true;
     }
   }
   events.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-  return { events, skipped };
+  const lines = unfold(text);
+  const calendar = lines.some(line => /^BEGIN:VCALENDAR$/i.test(line)) && lines.some(line => /^END:VCALENDAR$/i.test(line));
+  const balanced = lines.filter(line => /^BEGIN:VEVENT$/i.test(line)).length === lines.filter(line => /^END:VEVENT$/i.test(line)).length;
+  return { events, skipped, complete: calendar && balanced && !malformed && current === null && skipped === 0 };
 }
 
 function buildEvents(props: IcsProperty[], window: IcsWindow): DeskSourceEvent[] | null {
   const get = (name: string): IcsProperty | undefined => props.find((p) => p.name === name);
-  if (get("RECURRENCE-ID") || get("STATUS")?.value.toUpperCase() === "CANCELLED") return [];
+  if (get("STATUS")?.value.toUpperCase() === "CANCELLED") return [];
+  if (get("RECURRENCE-ID")) return null;
   const dtstart = get("DTSTART");
   const start = dtstart ? parseTime(dtstart) : null;
   const title = unescapeText(get("SUMMARY")?.value ?? "").trim();
@@ -230,6 +240,13 @@ function buildEvents(props: IcsProperty[], window: IcsWindow): DeskSourceEvent[]
   const uid = get("UID")?.value.trim() || `${title}@${start.wall.y}-${start.wall.mo}-${start.wall.d}`;
   const location = get("LOCATION") ? unescapeText(get("LOCATION")?.value ?? "").trim() : "";
   const url = get("URL")?.value.trim() ?? "";
+  const transparency = props.filter(property => property.name === "TRANSP");
+  const raw = transparency.length > 1 ? "INVALID" : transparency[0]?.value.trim().toUpperCase() ?? "UNKNOWN";
+  const status = get("STATUS")?.value.trim().toUpperCase();
+  const availability: NonNullable<DeskSourceEvent["availability"]> = {
+    status: status === "TENTATIVE" ? "unknown" : raw === "TRANSPARENT" ? "free" : raw === "OPAQUE" ? "busy" : "unknown",
+    provenance: `RFC5545.TRANSP.${raw}${status === "TENTATIVE" ? ".STATUS-TENTATIVE" : ""}`,
+  };
   return occurrences(start, rule, window, start.allDay ? length + DAY_MS : length)
     .filter((t) => {
       const at = toInstant(t);
@@ -238,6 +255,7 @@ function buildEvents(props: IcsProperty[], window: IcsWindow): DeskSourceEvent[]
     .map((t): DeskSourceEvent => ({
       id: rule ? `${uid}@${iso(toInstant(t))}` : uid,
       start: iso(toInstant(t)),
+      availability,
       ...(length > 0 ? { end: iso(endAt(t)) } : {}),
       ...(start.allDay ? { allDay: true } : {}),
       title,

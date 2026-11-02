@@ -25,6 +25,8 @@ A source prints `{ "events"?: [...], "items"?: [...] }` on stdout and exits 0. T
 - `links` (`DeskMailLink[]`, at most 20) are the links of the HTML body whose whole visible text names a host, as `{ text, href }`, for the Desk's phishing check.
 - Links must be `http:`, `https:` or `message:` (Apple Mail). Cortex drops entries that do not match and reports how many it dropped.
 
+Time first uses the additive [calendar availability source contract](docs/calendar-availability.md). Legacy event output remains valid for display and stays explicitly unqualified for free-gap recommendations.
+
 `desk-mail` reads message bodies without marking them read, and only for the newest unread messages (`--bodies`, default 15). It reads the headers of every listed message over IMAP with `BODY.PEEK`, using the `email` CLI's account config; when that fails it lists the mail without `headers` and writes one line to stderr. `desk-imap` reads the same headers in its own fetch. The verdicts come from the topmost Authentication-Results header, ignoring comments such as an ARC chain's. A sender can forge that header when the receiving server adds none, so pass `--authserv <id>` (repeatable) to either command to read only headers whose authserv-id, the first word of the header, is one your own mail server writes; with `--authserv` set and no match, `authResults` is left out. For the same unread messages it reads, `desk-mail` also reads the HTML body over IMAP (read-only, at most 256 KiB) for `links`; when that fails the mail is listed without them.
 
 ## macOS calendars under a daemon

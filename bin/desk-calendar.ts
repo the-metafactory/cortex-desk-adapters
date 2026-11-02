@@ -9,10 +9,12 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { dedupe, fromExchange, fromMac, type ExchangeEvent, type MacEvent } from "../src/calendar";
 import type { DeskSourceOutput } from "../src/contract";
+import { fromRawExchange } from "../src/calendar-availability";
 
 const { values } = parseArgs({
   options: {
     exchange: { type: "boolean", default: false },
+    availability: { type: "boolean", default: false },
     mac: { type: "boolean", default: false },
     exclude: { type: "string", multiple: true, default: [] },
     days: { type: "string", default: "5" },
@@ -30,12 +32,16 @@ async function ical(args: string[]): Promise<string> {
 const days = values.days ?? "5";
 let output: DeskSourceOutput;
 if (values.exchange) {
+  if (values.availability) {
+    output = fromRawExchange(JSON.parse(await ical(["exchange", "availability-raw", "--next", days])));
+  } else {
   const body = JSON.parse(await ical(["exchange", "list", "--next", days, "--compact", "--format", "json"])) as { events: ExchangeEvent[] };
-  output = { events: dedupe(body.events.map(fromExchange)) };
+  output = { capabilities: ["calendar"], events: dedupe(body.events.map(fromExchange)) };
+  }
 } else if (values.mac) {
   const excluded = new Set(values.exclude ?? []);
   const events = (JSON.parse(await ical(["read", "--next", days, "--format", "json"])) as MacEvent[]).filter((e) => !excluded.has(e.calendar));
-  output = { events: dedupe(events.map(fromMac)) };
+  output = { capabilities: ["calendar"], events: dedupe(events.map(fromMac)) };
 } else {
   process.stderr.write("desk-calendar: pass --exchange or --mac\n");
   process.exit(2);

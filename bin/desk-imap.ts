@@ -73,7 +73,7 @@ try {
     lock.release();
   }
   await client.logout();
-  const output: DeskSourceOutput = { items };
+  const output: DeskSourceOutput = { capabilities: ["attention"], items };
   process.stdout.write(JSON.stringify(output));
 } catch (err) {
   fail(`desk-imap: ${err instanceof Error ? err.message : String(err)}`);

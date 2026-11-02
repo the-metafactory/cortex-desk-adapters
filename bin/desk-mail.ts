@@ -57,5 +57,5 @@ for (const account of values.account ?? []) {
   }
 }
 
-const output: DeskSourceOutput = { items };
+const output: DeskSourceOutput = { capabilities: ["attention"], items };
 process.stdout.write(JSON.stringify(output));
