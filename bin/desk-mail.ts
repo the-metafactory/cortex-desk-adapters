@@ -34,8 +34,8 @@ const whole = (raw: string | undefined, name: string, max: number): number => {
   }
   return n;
 };
-const sentDays = whole(values["sent-days"], "sent-days", 90);
-const sentLimit = whole(values["sent-limit"], "sent-limit", 200);
+const sentDays = values.sent ? whole(values["sent-days"], "sent-days", 90) : 0;
+const sentLimit = values.sent ? whole(values["sent-limit"], "sent-limit", 200) : 0;
 
 async function run(args: string[]): Promise<string> {
   const proc = Bun.spawn(["email", ...args], { stdout: "pipe", stderr: "pipe" });

@@ -1,5 +1,6 @@
 import type { DeskMailAddress, DeskSentReply, DeskSourceSentMail } from "./contract";
 import { appleMailUrl } from "./mail";
+import { bareMessageId } from "./move";
 
 export const SENT_NAMES = ["Sent", "Sent Items", "Sent Messages", "Sent Mail", "Gesendete Elemente", "Gesendete Objekte", "Gesendet", "Éléments envoyés"] as const;
 export const ARCHIVE_NAMES = ["Archive", "Archives", "Archiv"] as const;
@@ -62,8 +63,6 @@ export interface SentEnvelope {
   cc?: EnvelopeAddress[];
 }
 
-const bare = (id: string): string => id.trim().replace(/^<|>$/g, "");
-
 const ADDRESS = /^[^\s<>@,;]+@[^\s<>@,;]+$/;
 
 function address(a: EnvelopeAddress | undefined): DeskMailAddress | null {
@@ -87,11 +86,11 @@ function recipients(env: SentEnvelope): DeskMailAddress[] {
 
 /** One sent message as a Desk `sent` item, or null without a Message-ID, a sender or a recipient. */
 export function toSentMail(env: SentEnvelope, account: string, more: { text?: string; references?: string[] } = {}): DeskSourceSentMail | null {
-  const id = env.messageId ? bare(env.messageId) : "";
+  const id = env.messageId ? bareMessageId(env.messageId) : "";
   const from = address(env.from?.[0]);
   const to = recipients(env);
   if (!id || !from || to.length === 0 || !env.date) return null;
-  const inReplyTo = env.inReplyTo ? bare(env.inReplyTo) : "";
+  const inReplyTo = env.inReplyTo ? bareMessageId(env.inReplyTo) : "";
   const subject = (env.subject ?? "").replace(/\s+/g, " ").trim().slice(0, SENT_LIMITS.subject) || "(no subject)";
   return {
     kind: "sent",
@@ -117,10 +116,10 @@ export interface ReplyCandidate {
 }
 
 export function replyCandidate(env: SentEnvelope, references: readonly string[]): ReplyCandidate | null {
-  const id = env.messageId ? bare(env.messageId) : "";
+  const id = env.messageId ? bareMessageId(env.messageId) : "";
   const from = address(env.from?.[0]);
   if (!id || !from || !env.date) return null;
-  const parents = [...new Set([...(env.inReplyTo ? [bare(env.inReplyTo)] : []), ...references])];
+  const parents = [...new Set([...(env.inReplyTo ? [bareMessageId(env.inReplyTo)] : []), ...references])];
   return parents.length > 0 ? { id, from, at: env.date.toISOString(), parents } : null;
 }
 
