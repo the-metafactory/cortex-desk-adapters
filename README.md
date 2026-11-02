@@ -76,6 +76,7 @@ The Desk's command bar turns typed text into a proposal card. When the person co
 | `dist/desk-reminders-mac [--list <name>]` | `reminder` | a reminder with an alarm in Apple Reminders, through EventKit |
 | `desk-task [--map <ref>]... [--autonomy approve] [--kind research] [--soma soma]` | `task` | a node on a work-graph map, through `soma graph add` |
 | `desk-task-close --map <ref>... [--gh gh]` | (closer) | closes a task `desk-task` filed, through `gh issue close` |
+| `desk-exchange-decline --ical-account <name>` | (remover) | removes Exchange's own copy of an invitation the Desk declined, by UID, through EWS |
 | `desk-goal [--soma soma]` | `goal` | a draft Soma goal, through `soma goal add` |
 | `desk-note-tana [--target <nodeId>]` | `note` | a plain node in Tana, through the Tana Input API |
 | `desk-parse [--model haiku] [--claude claude]` | (parser) | nothing; prints a proposal |
@@ -210,7 +211,7 @@ mc:
 
 With `mc.desk.mail.invitations` set, a mail item with an `invitation` offers Accept, Decline and Propose times. Accept and Decline run `mc.desk.mail.invitations.command` without a shell, after the person confirmed the answer, with `{ "action": "invite-reply", "account", "messageId", "uid", "reply": "accept" | "decline", "requestId" }` (`DeskInviteReplyRequest`) on stdin. Exit 0 means the reply went out; the command prints `{ "id", "message" }`. Otherwise the last line of stderr is shown and the Desk records the answer as not sent. Propose times needs no command: the Desk saves a reply draft through the draft command.
 
-`desk-mail-invite [--mailbox INBOX]` is that command for the `email` CLI's accounts. It reads the mail's text/calendar part again from INBOX (EXAMINE, `BODY.PEEK`), refuses when its UID is not the one the request names, when the account's From address or SMTP user is not an attendee, or when the Message-ID matches no message or more than one. It then sends an iMIP message (RFC 6047) to the organizer: a short text part and a `text/calendar; method=REPLY` part with the request's VTIMEZONEs, UID, SEQUENCE, times, ORGANIZER and SUMMARY, a new DTSTAMP and one ATTENDEE, the principal, with `PARTSTAT=ACCEPTED` or `DECLINED` (RFC 5546). It submits the message through the account's SMTP server with curl (STARTTLS required unless the account is `secure`); the password reaches curl on stdin, never in argv. It keeps the request ids it sent in `$XDG_STATE_HOME/cortex-desk-adapters/invite-replies.json` for 30 days, so a retry of one confirmed answer sends nothing. It never moves, deletes or changes mail, and it does not touch a calendar: the Desk adds an accepted event through its calendar writer where the stack asks for it. A server that places invitations on the calendar by itself (Exchange) keeps its own copy.
+`desk-mail-invite [--mailbox INBOX]` is that command for the `email` CLI's accounts. It reads the mail's text/calendar part again from INBOX (EXAMINE, `BODY.PEEK`), refuses when its UID is not the one the request names, when the account's From address or SMTP user is not an attendee, or when the Message-ID matches no message or more than one. It then sends an iMIP message (RFC 6047) to the organizer: a short text part and a `text/calendar; method=REPLY` part with the request's VTIMEZONEs, UID, SEQUENCE, times, ORGANIZER and SUMMARY, a new DTSTAMP and one ATTENDEE, the principal, with `PARTSTAT=ACCEPTED` or `DECLINED` (RFC 5546). It submits the message through the account's SMTP server with curl (STARTTLS required unless the account is `secure`); the password reaches curl on stdin, never in argv. It keeps the request ids it sent in `$XDG_STATE_HOME/cortex-desk-adapters/invite-replies.json` for 30 days, so a retry of one confirmed answer sends nothing. It never moves, deletes or changes mail, and it does not touch a calendar: the Desk adds an accepted event through its calendar writer where the stack asks for it. A server that places invitations on the calendar by itself (Exchange) keeps its own copy; see `removeOnDecline` below.
 
 ```yaml
 mc:
@@ -225,6 +226,16 @@ mc:
 ```
 
 An `addToCalendar` entry is an account name (the event goes to the calendar writer's default calendar) or `{ account, calendar }`: Cortex then runs the writer with `--calendar <calendar>` appended. `calendarWriter` is the writer for accepted invitations; without it Cortex uses `mc.desk.ask.writers.calendar`.
+
+A `removeOnDecline` entry `{ account, command }` removes the copy that the account's calendar server placed by itself when the invitation arrived. After a decline went out, Cortex runs the command with `{ "action": "remove-declined", "account", "uid", "start", "end"?, "recurring"? }` (`DeskDeclinedCopyRequest`) on stdin. Its message, or the reason it failed, is added to the card's decline line; a failure never undoes the decline.
+
+`desk-exchange-decline --ical-account <name> [--config <path>]` is that command for an Exchange account of the `ical` CLI (`~/.config/ical/config.json`, password from the keychain item `ical exchange config` stores). It lists the calendar from a day before the invitation's start to a day after its end through EWS (`FindItem` with a `CalendarView`) and keeps only items whose `UID` is exactly the request's; it never matches by title or time. For an occurrence of a recurring invitation it removes the series master, after checking the master's UID. It refuses an event the principal organizes. It deletes with `DeleteType="MoveToDeletedItems"` and `SendMeetingCancellations="SendToNone"`, so the item can be restored from Deleted Items and nothing goes to the organizer. A second run finds no copy and says so.
+
+```yaml
+        removeOnDecline:
+          - account: work
+            command: [/path/to/cortex-desk-adapters/bin/desk-exchange-decline.ts, --ical-account, me]
+```
 
 ### DMARC reports
 
