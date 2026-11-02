@@ -113,6 +113,8 @@ async function seriesMaster(item: CalendarItem, uid: string, ews: Ews): Promise<
   return master;
 }
 
+const inSeries = (c: CalendarItem): boolean => c.type === "Occurrence" || c.type === "Exception";
+
 /**
  * Removes the copy of a declined invitation that Exchange placed on the calendar: only items whose UID is the
  * invitation's, found around its time. A recurring invitation removes its series master; an invitation for one meeting
@@ -122,8 +124,8 @@ async function seriesMaster(item: CalendarItem, uid: string, ews: Ews): Promise<
 export async function removeDeclinedCopy(req: DeskDeclinedCopyRequest, ews: Ews): Promise<DeskWriteResult> {
   const copies = await findCopies(req, ews);
   if (copies.some((c) => c.organizer)) throw new Refusal(ORGANIZED);
-  const singles = copies.filter((c) => c.type !== "Occurrence" && c.type !== "Exception");
-  const occurrence = copies.find((c) => c.type === "Occurrence" || c.type === "Exception");
+  const singles = copies.filter((c) => !inSeries(c));
+  const occurrence = copies.find(inSeries);
   if (occurrence && !req.recurring) throw new Refusal("This invitation is for one meeting of a series, so the Desk does not remove it from Exchange.");
   const master = occurrence ? await seriesMaster(occurrence, req.uid, ews) : undefined;
   if (master?.organizer) throw new Refusal(ORGANIZED);
