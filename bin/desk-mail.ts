@@ -9,7 +9,7 @@
  * listed too, as `sent` items with the replies found in INBOX and the archive, read-only.
  * For every listed message, read or unread, a text/calendar part that holds a meeting request becomes the item's
  * `invitation`, unless the account's Sent folders hold an iTIP REPLY for it (same UID, SEQUENCE at least as new) or the
- * event is over. Beyond --days, INBOX mail of the last --invite-days days (default 14, at most 60) is read only for its
+ * event is over. Replies are looked for in Sent over max(--days, --invite-days) days. Beyond --days, INBOX mail of the last --invite-days days (default 14, at most 60) is read only for its
  * invitation: at most the newest --invite-scan messages (default 200, at most 1000) are scanned, and at most
  * --invite-limit mails (default 10, at most 50) with an open invitation are added. No other older mail is listed.
  */
@@ -18,6 +18,7 @@ import { toDeskMail, firstParagraph, type EmailListEntry } from "../src/mail";
 import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceOutput, DeskSourceSentMail } from "../src/contract";
 import { errorText, readHeaders, readInvitations, readLinks, readLookback, readSent } from "../src/imap";
 import { accountAddresses } from "../src/smtp";
+import { bareMessageId } from "../src/move";
 import { invitationOpen, LOOKBACK, lookbackItems, type LookbackCandidate } from "../src/invitation-lookback";
 
 const { values } = parseArgs({
@@ -50,6 +51,7 @@ const inviteDays = whole(values["invite-days"], "invite-days", LOOKBACK.maxDays)
 const inviteScan = whole(values["invite-scan"], "invite-scan", LOOKBACK.maxScan);
 const inviteLimit = whole(values["invite-limit"], "invite-limit", LOOKBACK.maxLimit);
 const DAY_MS = 86_400_000;
+const lookbackDays = Math.max(inviteDays, Number(values.days ?? "3") || 0);
 
 async function run(args: string[]): Promise<string> {
   const proc = Bun.spawn(["email", ...args], { stdout: "pipe", stderr: "pipe" });
@@ -77,17 +79,17 @@ for (const account of values.account ?? []) {
   };
   const self = await accountAddresses(account).catch(() => []);
   const now = Date.now();
-  const lookback = await readLookback(account, { since: new Date(now - inviteDays * DAY_MS), scan: inviteScan, skip: new Set(listed.map((m) => m.uid)), self, warn }).catch((err: unknown) => {
+  const linksRead = readLinks(account, unread.map((m) => m.uid), warn).catch(orEmpty<DeskMailLink[]>("links"));
+  const invitationsRead = readInvitations(account, listed.map((m) => m.uid), self, warn).catch(orEmpty<DeskMailInvitation>("invitations"));
+  const lookback = await readLookback(account, { since: new Date(now - lookbackDays * DAY_MS), scan: inviteScan, skip: new Set(listed.map((m) => m.uid)), self, warn }).catch((err: unknown) => {
     warn(`older invitations and invitation replies were not read: ${errorText(err)}`);
     return { replies: new Map<string, number>(), candidates: [] as LookbackCandidate[] };
   });
-  const older = lookbackItems(lookback.candidates, { account, listed: new Set(listed.map((m) => m.messageId.replace(/^<|>$/g, ""))), replies: lookback.replies, now, limit: inviteLimit });
-  const olderUids = new Map(lookback.candidates.map((c) => [c.envelope.messageId?.replace(/^<|>$/g, "") ?? "", c.uid]));
-  const added = older.flatMap((o) => olderUids.get(o.id) ?? []);
+  const older = lookbackItems(lookback.candidates, { account, listed: new Set(listed.map((m) => bareMessageId(m.messageId))), replies: lookback.replies, now, limit: inviteLimit });
   const [headers, links, invitations] = await Promise.all([
-    readHeaders(account, [...listed.map((m) => m.uid), ...added], values.authserv).catch(orEmpty<DeskMailHeaders>("headers")),
-    readLinks(account, unread.map((m) => m.uid), warn).catch(orEmpty<DeskMailLink[]>("links")),
-    readInvitations(account, listed.map((m) => m.uid), self, warn).catch(orEmpty<DeskMailInvitation>("invitations")),
+    readHeaders(account, [...listed.map((m) => m.uid), ...older.map((o) => o.uid)], values.authserv).catch(orEmpty<DeskMailHeaders>("headers")),
+    linksRead,
+    invitationsRead,
   ]);
   for (const m of listed) {
     const item = toDeskMail(m, account, paragraphs.get(m.uid) ?? m.snippet);
@@ -98,9 +100,8 @@ for (const account of values.account ?? []) {
     items.push({ ...item, ...(h ? { headers: h } : {}), ...(l ? { links: l } : {}), ...(invitation ? { invitation } : {}) });
   }
   for (const o of older) {
-    const uid = olderUids.get(o.id);
-    const h = uid === undefined ? undefined : headers.get(uid);
-    items.push({ ...o, ...(h ? { headers: h } : {}) });
+    const h = headers.get(o.uid);
+    items.push({ ...o.mail, ...(h ? { headers: h } : {}) });
   }
   if (values.sent) {
     try {

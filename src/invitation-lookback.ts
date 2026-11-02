@@ -60,16 +60,16 @@ export function lookbackMail(c: LookbackCandidate, account: string): DeskSourceM
  * The look-back mails to add: open invitations only, not already listed (by Message-ID), newest first, at most `limit`.
  * No other mail is added, so read mail without an open invitation never comes back.
  */
-export function lookbackItems(candidates: readonly LookbackCandidate[], input: { account: string; listed: ReadonlySet<string>; replies: Replies; now: number; limit: number }): DeskSourceMail[] {
+export function lookbackItems(candidates: readonly LookbackCandidate[], input: { account: string; listed: ReadonlySet<string>; replies: Replies; now: number; limit: number }): { uid: number; mail: DeskSourceMail }[] {
   const seen = new Set(input.listed);
-  const out: DeskSourceMail[] = [];
+  const out: { uid: number; mail: DeskSourceMail }[] = [];
   for (const c of [...candidates].sort((a, b) => b.uid - a.uid)) {
     if (out.length >= input.limit) break;
     if (!invitationOpen(c.invitation, input.replies, input.now)) continue;
     const mail = lookbackMail(c, input.account);
     if (!mail || seen.has(mail.id)) continue;
     seen.add(mail.id);
-    out.push(mail);
+    out.push({ uid: c.uid, mail });
   }
   return out;
 }

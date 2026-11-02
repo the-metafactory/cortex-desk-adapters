@@ -68,8 +68,10 @@ describe("lookbackItems", () => {
   const input = { account: "work", listed: new Set<string>(), replies: new Map<string, number>(), now: NOW, limit: 10 };
 
   test("adds an open read invitation as a read mail that carries it", () => {
-    const [mail, ...rest] = lookbackItems([candidate(3)], input);
+    const [first, ...rest] = lookbackItems([candidate(3)], input);
     expect(rest).toEqual([]);
+    expect(first?.uid).toBe(3);
+    const mail = first?.mail;
     expect(mail).toMatchObject({ kind: "mail", id: "m3@example.org", from: { name: "Olga", address: "olga@example.org" }, subject: "Invitation 3", unread: false, account: "work", invitation: { uid: "uid-3" } });
     expect(mail?.url).toBe("message://%3Cm3%40example.org%3E");
   });
@@ -83,11 +85,11 @@ describe("lookbackItems", () => {
       candidate(4, { envelope: { messageId: "<m4@example.org>", from: [{ address: "olga@example.org" }] } }),
       candidate(5),
     ], { ...input, replies, listed: new Set(["m3@example.org"]) });
-    expect(items.map((m) => m.id)).toEqual(["m5@example.org"]);
+    expect(items.map((m) => m.mail.id)).toEqual(["m5@example.org"]);
   });
 
   test("keeps the newest first and stops at the limit", () => {
     const items = lookbackItems([candidate(1), candidate(9, { flags: new Set() }), candidate(5)], { ...input, limit: 2 });
-    expect(items.map((m) => [m.id, m.unread])).toEqual([["m9@example.org", true], ["m5@example.org", false]]);
+    expect(items.map((m) => [m.mail.id, m.mail.unread])).toEqual([["m9@example.org", true], ["m5@example.org", false]]);
   });
 });
