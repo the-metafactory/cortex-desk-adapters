@@ -153,6 +153,36 @@ describe("sendMail", () => {
     expect(calls[0]?.stdin).toContain("ssl-reqd");
     expect(calls[0]?.stdin).toContain('mail-rcpt = "olga@example.org"');
   });
+  const mechanisms = (configs: string[]) => configs.map((c) => /login-options = "AUTH=(\w+)"/.exec(c)?.[1] ?? "any");
+  const answering = (codes: number[]) => {
+    const configs: string[] = [];
+    const run = async (_argv: string[], stdin?: string) => {
+      configs.push(stdin ?? "");
+      const code = codes[configs.length - 1] ?? 0;
+      return { code, stdout: "", stderr: code === 0 ? "" : `curl: (${code}) failed` };
+    };
+    return { configs, run };
+  };
+  test("authenticates with AUTH LOGIN first", async () => {
+    const fake = answering([0]);
+    await sendMail(ACCOUNT, "olga@example.org", "msg", fake.run);
+    expect(mechanisms(fake.configs)).toEqual(["LOGIN"]);
+  });
+  test("after an authentication failure (94) it tries PLAIN", async () => {
+    const fake = answering([94, 0]);
+    await sendMail(ACCOUNT, "olga@example.org", "msg", fake.run);
+    expect(mechanisms(fake.configs)).toEqual(["LOGIN", "PLAIN"]);
+  });
+  test("when LOGIN and PLAIN are denied (67) it lets curl choose, then reports the last reason", async () => {
+    const fake = answering([67, 67, 67]);
+    await expect(sendMail(ACCOUNT, "olga@example.org", "msg", fake.run)).rejects.toThrow("curl: (67) failed");
+    expect(mechanisms(fake.configs)).toEqual(["LOGIN", "PLAIN", "any"]);
+  });
+  test("a failure that is not authentication is not retried", async () => {
+    const fake = answering([7]);
+    await expect(sendMail(ACCOUNT, "olga@example.org", "msg", fake.run)).rejects.toThrow("curl: (7) failed");
+    expect(fake.configs).toHaveLength(1);
+  });
   test("a refused submission is a refusal with curl's reason", async () => {
     await expect(sendMail(ACCOUNT, "olga@example.org", "msg", async () => ({ code: 55, stdout: "", stderr: "curl: (55) Recipient rejected" }))).rejects.toThrow("Recipient rejected");
   });
