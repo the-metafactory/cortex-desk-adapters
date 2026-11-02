@@ -2,14 +2,15 @@ import { ImapFlow } from "imapflow";
 import type { ImapAccount } from "./imap-account";
 import { imapAccount } from "./imap-account";
 import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceSentMail } from "./contract";
-import { calendarPart, parseInvitation, type CalendarPartNode } from "./invitation";
+import { calendarPart, parseInvitation, parseReply, type CalendarPartNode } from "./invitation";
+import { addReply, type LookbackCandidate } from "./invitation-lookback";
 import { linksOf } from "./links";
 import { MAX_ORIGINAL, TOO_LARGE, type PhishingReportBox } from "./report";
 import { HEADER_FIELDS, headersOf, messageIds } from "./mail-headers";
 import { ReportRefusal, type Attachment, type ReportMailbox } from "./dmarc";
 import { bareMessageId, folderByUse, type Mailbox } from "./move";
 import { textPart, type StructureNode } from "./imap-mail";
-import { ARCHIVE_NAMES, replyCandidate, sentFolders, sentText, toSentMail, withReplies, type ReplyCandidate } from "./sent";
+import { ARCHIVE_NAMES, replyCandidate, sentFolders, sentText, toSentMail, withReplies, type ReplyCandidate, type SentEnvelope } from "./sent";
 import { spawnRunner } from "./run";
 import { Refusal } from "./writers";
 
@@ -361,6 +362,73 @@ export async function readInvitations(account: string, uids: number[], self: rea
       lock.release();
     }
     return out;
+  });
+}
+
+interface CalendarText {
+  uid: number;
+  ics: string;
+  envelope?: SentEnvelope;
+  flags?: Set<string>;
+}
+
+async function calendarTexts(client: ImapFlow, uids: number[], warn: (line: string) => void, query: { envelope?: boolean; flags?: boolean } = {}): Promise<CalendarText[]> {
+  if (uids.length === 0) return [];
+  const out: CalendarText[] = [];
+  for (const m of await client.fetchAll(uids, { bodyStructure: true, ...query }, { uid: true })) {
+    const part = calendarPart(m.bodyStructure as CalendarPartNode | undefined);
+    if (!part) continue;
+    try {
+      out.push({ uid: m.uid, ics: await downloadText(client, m.uid, part, CALENDAR_BYTES), ...(m.envelope ? { envelope: m.envelope as SentEnvelope } : {}), ...(m.flags ? { flags: m.flags } : {}) });
+    } catch (err) {
+      warn(`the calendar part of message ${m.uid} was not read: ${errorText(err)}`);
+    }
+  }
+  return out;
+}
+
+export interface LookbackOptions {
+  since: Date;
+  /** At most this many newest messages are scanned, in INBOX and in each Sent folder. */
+  scan: number;
+  /** INBOX UIDs already listed, which the look-back skips. */
+  skip: ReadonlySet<number>;
+  self: readonly string[];
+  warn?: (line: string) => void;
+}
+
+/**
+ * One read-only pass (EXAMINE, BODY.PEEK) for the invitation look-back: the iTIP REPLYs the account sent since `since`
+ * (from its Sent folders), and the INBOX invitations since `since` that are not in `skip`. A Sent folder that cannot be
+ * read is skipped with a warning, so an invitation answered there may still show.
+ */
+export async function readLookback(account: string, options: LookbackOptions): Promise<{ replies: Map<string, number>; candidates: LookbackCandidate[] }> {
+  const warn = options.warn ?? (() => undefined);
+  return withImapClient(account, async (client) => {
+    const replies = new Map<string, number>();
+    const boxes = (await client.list()).map((b) => ({ path: b.path, name: b.name, ...(b.specialUse ? { specialUse: b.specialUse } : {}) }));
+    const sentPaths = sentFolders(boxes);
+    if (sentPaths.length === 0) warn("no Sent folder was found, so invitations answered outside the Desk are not recognised");
+    for (const path of sentPaths) {
+      try {
+        await inFolder(client, path, async () => {
+          for (const { ics } of await calendarTexts(client, await newestUids(client, options.since, options.scan), warn)) {
+            const reply = parseReply(ics);
+            if (reply) addReply(replies, reply);
+          }
+        });
+      } catch (err) {
+        warn(`invitation replies in ${path} were not read: ${errorText(err)}`);
+      }
+    }
+    const candidates = await inFolder(client, "INBOX", async () => {
+      const uids = (await newestUids(client, options.since, options.scan)).filter((uid) => !options.skip.has(uid));
+      return (await calendarTexts(client, uids, warn, { envelope: true, flags: true })).flatMap((m): LookbackCandidate[] => {
+        const invitation = m.envelope ? parseInvitation(m.ics, options.self) : null;
+        return invitation && m.envelope ? [{ uid: m.uid, envelope: m.envelope, flags: m.flags, invitation }] : [];
+      });
+    });
+    return { replies, candidates };
   });
 }
 

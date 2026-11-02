@@ -111,6 +111,19 @@ function masterEvent(items: Component[]): Component | undefined {
   return events.find((e) => !ownProperties(e).some((p) => p.name === "RECURRENCE-ID")) ?? events[0];
 }
 
+/** The UID and SEQUENCE of an iTIP METHOD:REPLY, as the principal's client sent it; null for anything else. */
+export function parseReply(ics: string): { uid: string; sequence: number } | null {
+  const { method, items } = components(ics);
+  if (method !== "REPLY") return null;
+  const event = masterEvent(items);
+  if (!event) return null;
+  const props = ownProperties(event);
+  const uid = props.find((p) => p.name === "UID")?.value.trim();
+  if (!uid || !UID.test(uid)) return null;
+  const sequence = Number(props.find((p) => p.name === "SEQUENCE")?.value.trim() ?? "0");
+  return { uid: clip(uid, 1000), sequence: Number.isInteger(sequence) && sequence >= 0 ? sequence : 0 };
+}
+
 /**
  * Reads a calendar invitation (iTIP METHOD:REQUEST) for the Desk. `self` holds the account's own addresses, to find the
  * principal among the attendees. Anything that is not a well-formed request with a UID, a start and an organizer is null.
