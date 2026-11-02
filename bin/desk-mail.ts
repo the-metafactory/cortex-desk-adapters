@@ -5,11 +5,13 @@
  * Bodies are fetched read-only (no --mark-read) for the newest unread messages only. Headers (List-Id, List-Unsubscribe,
  * Authentication-Results, Reply-To, In-Reply-To) are read over IMAP with BODY.PEEK; without them the mail is listed as before.
  * For the same unread messages, the links of the HTML body whose text names a host are read with BODY.PEEK too.
+ * With --sent, the account's sent mail of the last --sent-days days (default 14, newest --sent-limit, default 40) is
+ * listed too, as `sent` items with the replies found in INBOX and the archive, read-only.
  */
 import { parseArgs } from "node:util";
 import { toDeskMail, firstParagraph, type EmailListEntry } from "../src/mail";
-import type { DeskMailHeaders, DeskMailLink, DeskSourceMail, DeskSourceOutput } from "../src/contract";
-import { readHeaders, readLinks } from "../src/imap";
+import type { DeskMailHeaders, DeskMailLink, DeskSourceMail, DeskSourceOutput, DeskSourceSentMail } from "../src/contract";
+import { errorText, readHeaders, readLinks, readSent } from "../src/imap";
 
 const { values } = parseArgs({
   options: {
@@ -18,8 +20,22 @@ const { values } = parseArgs({
     limit: { type: "string", default: "40" },
     bodies: { type: "string", default: "15" },
     authserv: { type: "string", multiple: true, default: [] },
+    sent: { type: "boolean", default: false },
+    "sent-days": { type: "string", default: "14" },
+    "sent-limit": { type: "string", default: "40" },
   },
 });
+
+const whole = (raw: string | undefined, name: string, max: number): number => {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > max) {
+    process.stderr.write(`desk-mail: --${name} must be a whole number from 1 to ${max}.\n`);
+    process.exit(1);
+  }
+  return n;
+};
+const sentDays = values.sent ? whole(values["sent-days"], "sent-days", 90) : 0;
+const sentLimit = values.sent ? whole(values["sent-limit"], "sent-limit", 200) : 0;
 
 async function run(args: string[]): Promise<string> {
   const proc = Bun.spawn(["email", ...args], { stdout: "pipe", stderr: "pipe" });
@@ -28,7 +44,7 @@ async function run(args: string[]): Promise<string> {
   return out;
 }
 
-const items: DeskSourceMail[] = [];
+const items: (DeskSourceMail | DeskSourceSentMail)[] = [];
 for (const account of values.account ?? []) {
   const listed = JSON.parse(await run(["list", "-a", account, "-s", values.days ?? "3", "-l", values.limit ?? "40", "-o", "json"])) as EmailListEntry[];
   const unread = listed.filter((m) => !m.flags.includes("\\Seen")).slice(0, Number(values.bodies));
@@ -42,7 +58,7 @@ for (const account of values.account ?? []) {
   }
   const warn = (line: string): void => void process.stderr.write(`desk-mail: ${account}: ${line}\n`);
   const orEmpty = <V>(what: string) => (err: unknown): Map<number, V> => {
-    warn(`${what} were not read: ${err instanceof Error ? err.message : String(err)}`);
+    warn(`${what} were not read: ${errorText(err)}`);
     return new Map();
   };
   const [headers, links] = await Promise.all([
@@ -54,6 +70,13 @@ for (const account of values.account ?? []) {
     const h = headers.get(m.uid);
     const l = links.get(m.uid);
     items.push({ ...item, ...(h ? { headers: h } : {}), ...(l ? { links: l } : {}) });
+  }
+  if (values.sent) {
+    try {
+      items.push(...(await readSent(account, { days: sentDays, limit: sentLimit, warn })));
+    } catch (err) {
+      warn(`sent mail was not read: ${errorText(err)}`);
+    }
   }
 }
 

@@ -57,6 +57,44 @@ export interface DeskMailHeaders {
   authResults?: { spf?: DeskAuthVerdict; dkim?: DeskAuthVerdict; dmarc?: DeskAuthVerdict; dkimDomains?: string[]; spfDomain?: string };
   replyTo?: string;
   inReplyTo?: string;
+  /** The Message-IDs of the References header, without angle brackets, the closest ancestors last (at most 20). */
+  references?: string[];
+}
+
+export interface DeskMailAddress {
+  name?: string;
+  address: string;
+}
+
+/** A reply to a sent mail: a message in INBOX or the archive whose In-Reply-To or References names it, from someone other than the sender. */
+export interface DeskSentReply {
+  id: string;
+  from: DeskMailAddress;
+  /** ISO 8601. */
+  at: string;
+}
+
+/**
+ * One mail the account sent (`desk-mail --sent`), for the Desk's "Waiting for an answer". Untrusted data, like every
+ * source field. `text` is the start of the plain-text body without quoted lines or signature, at most 1000 characters.
+ */
+export interface DeskSourceSentMail {
+  kind: "sent";
+  /** The RFC 5322 Message-ID without angle brackets. */
+  id: string;
+  from: DeskMailAddress;
+  /** To and Cc, at most 20. */
+  to: DeskMailAddress[];
+  subject: string;
+  /** ISO 8601. */
+  sentAt: string;
+  text?: string;
+  url?: string;
+  account?: string;
+  inReplyTo?: string;
+  references?: string[];
+  /** At most 10, oldest first. */
+  replies?: DeskSentReply[];
 }
 
 export interface DeskSourceOutput {
@@ -69,7 +107,7 @@ export interface DeskSourceOutput {
     provenance: string;
   };
   events?: DeskSourceEvent[];
-  items?: DeskSourceMail[];
+  items?: (DeskSourceMail | DeskSourceSentMail)[];
 }
 
 /**

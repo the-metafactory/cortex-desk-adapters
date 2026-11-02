@@ -11,7 +11,7 @@ For examples that work without the personal toolkit, see [Portable Desk adapters
 | `desk-calendar --exchange` | an Exchange calendar through the `ical` CLI | `events` |
 | `desk-calendar --mac [--exclude <calendar>]` | macOS Calendar through the `ical` CLI (legacy: returns nothing under a daemon) | `events` |
 | `dist/desk-calendar-mac [--exclude <calendar>] [--include <calendar>] [--days 5]` | macOS Calendar through EventKit (a compiled Swift binary) | `events` |
-| `desk-mail --account <name>` | an IMAP mailbox through the `email` CLI | `items` (mail) |
+| `desk-mail --account <name> [--sent]` | an IMAP mailbox through the `email` CLI | `items` (mail, and with `--sent` sent mail) |
 
 Both wrap CLIs from a personal toolkit. They are examples of the contract as much as tools: copy one and point it at your own calendar or mail tool.
 
@@ -28,6 +28,8 @@ A source prints `{ "events"?: [...], "items"?: [...] }` on stdout and exits 0. T
 Time first uses the additive [calendar availability source contract](docs/calendar-availability.md). Legacy event output remains valid for display and stays explicitly unqualified for free-gap recommendations.
 
 `desk-mail` reads message bodies without marking them read, and only for the newest unread messages (`--bodies`, default 15). It reads the headers of every listed message over IMAP with `BODY.PEEK`, using the `email` CLI's account config; when that fails it lists the mail without `headers` and writes one line to stderr. `desk-imap` reads the same headers in its own fetch. The verdicts come from the topmost Authentication-Results header, ignoring comments such as an ARC chain's. A sender can forge that header when the receiving server adds none, so pass `--authserv <id>` (repeatable) to either command to read only headers whose authserv-id, the first word of the header, is one your own mail server writes; with `--authserv` set and no match, `authResults` is left out. For the same unread messages it reads, `desk-mail` also reads the HTML body over IMAP (read-only, at most 256 KiB) for `links`; when that fails the mail is listed without them.
+
+With `--sent`, `desk-mail` also lists the account's sent mail of the last `--sent-days` days (default 14, at most 90), the newest `--sent-limit` (default 40), as `sent` items (`DeskSourceSentMail`): Message-ID, sender, To and Cc (at most 20), subject, `sentAt`, `inReplyTo`, `references`, and `text`, the start of the plain-text body up to the first quoted line, attribution line, forwarded header or signature (at most 1000 characters). It reads the folder flagged `\Sent` and every folder with a usual Sent name (Sent, Sent Items, Sent Messages, Gesendete Elemente, …), because Exchange can flag a stale one. For each sent mail it adds `replies` (at most 10, oldest first): messages of the same window in INBOX and the archive folder whose In-Reply-To or References names it and whose sender is not the account's own address. Everything is read with EXAMINE and `BODY.PEEK`, so nothing is marked read. When the sent mail cannot be read, the inbox is listed alone and one line goes to stderr. Every mail item's `headers` now also carries `references`, the Message-IDs of its References header (at most 20, closest ancestors last). The Desk uses both for "Waiting for an answer"; a Cortex that does not know `sent` items drops them as unreadable, so turn `--sent` on with that Cortex.
 
 ## macOS calendars under a daemon
 

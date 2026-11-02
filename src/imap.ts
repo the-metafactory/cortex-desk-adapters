@@ -1,12 +1,14 @@
 import { ImapFlow } from "imapflow";
 import type { ImapAccount } from "./imap-account";
 import { imapAccount } from "./imap-account";
-import type { DeskMailHeaders, DeskMailLink } from "./contract";
+import type { DeskMailHeaders, DeskMailLink, DeskSourceSentMail } from "./contract";
 import { linksOf } from "./links";
 import { MAX_ORIGINAL, TOO_LARGE, type PhishingReportBox } from "./report";
-import { HEADER_FIELDS, headersOf } from "./mail-headers";
+import { HEADER_FIELDS, headersOf, messageIds } from "./mail-headers";
 import { ReportRefusal, type Attachment, type ReportMailbox } from "./dmarc";
-import { bareMessageId, type Mailbox } from "./move";
+import { bareMessageId, folderByUse, type Mailbox } from "./move";
+import { textPart, type StructureNode } from "./imap-mail";
+import { ARCHIVE_NAMES, replyCandidate, sentFolders, sentText, toSentMail, withReplies, type ReplyCandidate } from "./sent";
 import { spawnRunner } from "./run";
 import { Refusal } from "./writers";
 
@@ -161,7 +163,7 @@ export async function readLinks(account: string, uids: number[], warn: (line: st
           const links = linksOf(Buffer.concat(chunks).toString("utf8"));
           if (links.length > 0) out.set(m.uid, links);
         } catch (err) {
-          warn(`the links of message ${m.uid} were not read: ${err instanceof Error ? err.message : String(err)}`);
+          warn(`the links of message ${m.uid} were not read: ${errorText(err)}`);
         }
       }
     } finally {
@@ -209,4 +211,121 @@ export const phishingReportBox = (client: ImapFlow, account: string): PhishingRe
 /** Runs `work` on a PhishingReportBox for one account: originals are read with EXAMINE and BODY.PEEK; the draft goes to Drafts. */
 export function withPhishingReportBox<T>(account: string, work: (box: PhishingReportBox, user: string) => Promise<T>): Promise<T> {
   return imapAccount(account, spawnRunner).then((acct) => withImapClient(account, (client) => work(phishingReportBox(client, account), acct.user)));
+}
+
+export interface SentOptions {
+  days: number;
+  limit: number;
+  now?: number;
+  warn?: (line: string) => void;
+}
+
+const DAY_MS = 86_400_000;
+
+export const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+const MAX_CANDIDATES = 1000;
+const TEXT_BYTES = 8192;
+
+const referencesOf = (m: { headers?: Buffer }): string[] => messageIds(m.headers?.toString("utf8"));
+
+async function newestUids(client: ImapFlow, since: Date, max: number): Promise<number[]> {
+  return ((await client.search({ since }, { uid: true })) || []).sort((a, b) => b - a).slice(0, max);
+}
+
+async function inFolder<T>(client: ImapFlow, path: string, work: () => Promise<T>): Promise<T> {
+  const lock = await client.getMailboxLock(path, { readOnly: true });
+  try {
+    return await work();
+  } finally {
+    lock.release();
+  }
+}
+
+async function sentBody(client: ImapFlow, uid: number, structure: StructureNode | undefined): Promise<string | undefined> {
+  const part = textPart(structure);
+  if (!part) return undefined;
+  const { content } = await client.download(String(uid), part, { uid: true, maxBytes: TEXT_BYTES });
+  const chunks: Buffer[] = [];
+  for await (const chunk of content) chunks.push(Buffer.from(chunk));
+  return sentText(Buffer.concat(chunks).toString("utf8"));
+}
+
+interface Listed {
+  path: string;
+  uid: number;
+  structure: StructureNode | undefined;
+  item: DeskSourceSentMail;
+}
+
+const sentIn = (client: ImapFlow, path: string, since: Date, limit: number, account: string): Promise<Listed[]> =>
+  inFolder(client, path, async () => {
+    const uids = await newestUids(client, since, limit);
+    if (uids.length === 0) return [];
+    const messages = await client.fetchAll(uids, { envelope: true, bodyStructure: true, headers: ["references"] }, { uid: true });
+    return messages.flatMap((m) => {
+      const item = m.envelope ? toSentMail(m.envelope, account, referencesOf(m)) : null;
+      return item ? [{ path, uid: m.uid, structure: m.bodyStructure as StructureNode | undefined, item }] : [];
+    });
+  });
+
+const candidatesIn = (client: ImapFlow, path: string, since: Date): Promise<ReplyCandidate[]> =>
+  inFolder(client, path, async () => {
+    const uids = await newestUids(client, since, MAX_CANDIDATES);
+    if (uids.length === 0) return [];
+    const messages = await client.fetchAll(uids, { envelope: true, headers: ["references"] }, { uid: true });
+    return messages.flatMap((m) => (m.envelope ? replyCandidate(m.envelope, referencesOf(m)) ?? [] : []));
+  });
+
+/**
+ * The account's sent mail of the last `days` days (newest `limit`), read-only (EXAMINE, BODY.PEEK), each with the
+ * replies found in INBOX and the archive folder. Sent folders that cannot be read are skipped with a warning. When a
+ * reply folder cannot be read it lists no sent mail at all, so answered mail never looks unanswered.
+ */
+export async function readSent(account: string, options: SentOptions): Promise<DeskSourceSentMail[]> {
+  const warn = options.warn ?? (() => undefined);
+  const since = new Date((options.now ?? Date.now()) - options.days * DAY_MS);
+  return withImapClient(account, async (client) => {
+    const boxes = (await client.list()).map((b) => ({ path: b.path, name: b.name, ...(b.specialUse ? { specialUse: b.specialUse } : {}) }));
+    const sentPaths = sentFolders(boxes);
+    if (sentPaths.length === 0) {
+      warn("no Sent folder was found, so sent mail is not listed");
+      return [];
+    }
+    const listed: Listed[] = [];
+    for (const path of sentPaths) {
+      try {
+        listed.push(...(await sentIn(client, path, since, options.limit, account)));
+      } catch (err) {
+        warn(`sent mail in ${path} was not read: ${errorText(err)}`);
+      }
+    }
+    const byId = new Map<string, Listed>();
+    for (const l of listed) if (!byId.has(l.item.id)) byId.set(l.item.id, l);
+    const newest = [...byId.values()].sort((a, b) => Date.parse(b.item.sentAt) - Date.parse(a.item.sentAt)).slice(0, options.limit);
+    if (newest.length === 0) return [];
+    const archivePath = folderByUse(boxes, "\\Archive", ARCHIVE_NAMES);
+    if (!archivePath) warn("no archive folder was found, so replies are looked for in INBOX only");
+    const candidates: ReplyCandidate[] = [];
+    for (const folder of ["INBOX", ...(archivePath ? [archivePath] : [])]) {
+      try {
+        candidates.push(...(await candidatesIn(client, folder, since)));
+      } catch (err) {
+        warn(`replies in ${folder} were not read, so sent mail is not listed: ${errorText(err)}`);
+        return [];
+      }
+    }
+    const sent: DeskSourceSentMail[] = [];
+    for (const path of new Set(newest.map((l) => l.path))) {
+      await inFolder(client, path, async () => {
+        for (const l of newest.filter((x) => x.path === path)) {
+          const text = await sentBody(client, l.uid, l.structure).catch(() => undefined);
+          sent.push(withReplies(text ? { ...l.item, text } : l.item, candidates));
+        }
+      }).catch((err: unknown) => {
+        warn(`the text of sent mail in ${path} was not read: ${errorText(err)}`);
+        for (const l of newest.filter((x) => x.path === path)) sent.push(withReplies(l.item, candidates));
+      });
+    }
+    return sent.sort((a, b) => Date.parse(b.sentAt) - Date.parse(a.sentAt));
+  });
 }
