@@ -1,14 +1,14 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { DEDUPE_DAYS, readJson, readLedger, writeLedger } from "./ledger";
+
+export { DEDUPE_DAYS } from "./ledger";
 import type { DeskWriteResult } from "./contract";
 import { isRecord } from "./guards";
 import { Refusal } from "./writers";
 
 export const TANA_ENDPOINT = "https://europe-west1-tagr-prod.cloudfunctions.net/addToNodeV2";
 export const NOTE_MAX = 1000;
-export const DEDUPE_DAYS = 30;
-const DAY_MS = 86_400_000;
 
 export type Fetch = (url: string, init: { method: "POST"; headers: Record<string, string>; body: string }) => Promise<Response>;
 type Env = Record<string, string | undefined>;
@@ -22,20 +22,6 @@ export const supertagConfigPath = (env: Env): string => join(env.XDG_CONFIG_HOME
 
 export const ledgerPath = (env: Env): string =>
   join(env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "cortex-desk-adapters", "tana-notes.json");
-
-async function readJson(path: string): Promise<unknown> {
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch {
-    return undefined;
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}
 
 const nonEmpty = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
@@ -74,30 +60,6 @@ export function createdNodeId(body: unknown): string | undefined {
   if (isRecord(first) && typeof first.nodeId === "string" && first.nodeId) return first.nodeId;
   const legacy = Array.isArray(body.nodeIds) ? body.nodeIds[0] : undefined;
   return typeof legacy === "string" && legacy ? legacy : undefined;
-}
-
-export interface LedgerEntry {
-  id: string;
-  at: number;
-}
-export type Ledger = Record<string, LedgerEntry>;
-
-export async function readLedger(path: string, now: number): Promise<Ledger> {
-  const body = await readJson(path);
-  const ledger: Ledger = {};
-  if (!isRecord(body)) return ledger;
-  for (const [requestId, entry] of Object.entries(body)) {
-    if (!isRecord(entry) || typeof entry.id !== "string" || typeof entry.at !== "number") continue;
-    if (now - entry.at < DEDUPE_DAYS * DAY_MS) ledger[requestId] = { id: entry.id, at: entry.at };
-  }
-  return ledger;
-}
-
-export async function writeLedger(path: string, ledger: Ledger): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const tmp = `${path}.${process.pid}.tmp`;
-  await writeFile(tmp, `${JSON.stringify(ledger, null, 2)}\n`, { mode: 0o600 });
-  await rename(tmp, path);
 }
 
 export interface NoteOptions {
