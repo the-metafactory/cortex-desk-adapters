@@ -98,7 +98,9 @@ Notes and reminders need no writer: without one, Cortex keeps them on the Desk (
 
 ### The parser contract
 
-Cortex may run a parser before it builds the card. Its stdin gets `{ "text", "now" (ISO 8601), "timeZone" (IANA), "kinds", "maps": [{ "ref", "label" }] }`; `kinds` is a subset of `reminder`, `note`, `task`, `goal` and `calendar`. It prints one object: `{ "kind", "fields" }` with the fields above, or `{ "kind": "none", "reason" }`. Cortex validates the answer and falls back to its own rules parser on any failure, so a parser may fail loudly.
+Cortex may run a parser before it builds the card. Its stdin gets `{ "text", "now" (ISO 8601), "timeZone" (IANA), "kinds", "maps": [{ "ref", "label" }] }`; `kinds` is a subset of `reminder`, `note`, `task`, `goal`, `calendar` and `conversation` (Cortex also sends kinds it handles itself, which `desk-parse` drops). It prints one object: `{ "kind", "fields" }` with the fields above, or `{ "kind": "none", "reason" }`. Cortex validates the answer and falls back to its own rules parser on any failure, so a parser may fail loudly.
+
+`conversation` is offered when the stack has Ivy conversations. `desk-parse` answers it for a question or a request to think, discuss, brainstorm, decide or explore, and prefers it over `none`. Its fields are `{ "text" }`, always the typed text; Cortex ignores any other wording and starts the conversation itself, so no writer runs for this kind (cortex#3076).
 
 ### Read-only Balance parent proposals
 

@@ -49,6 +49,18 @@ it("refuses a kind not asked for, bad times, and a map not offered", () => {
   expect(validateParse({ kind: "task", fields: { title: "x", map: "the-metafactory/cortex#2770" } }, req).kind).toBe("task");
 });
 
+it("asks for a conversation for open questions and carries the typed text, not the model's words", () => {
+  const ask = { ...req, text: 'can we think of a better name for this product? "Desk" is underselling it', kinds: ["note", "goal", "conversation"] as DeskCreationParseRequest["kinds"] };
+  expect(readParseRequest(JSON.stringify(ask))).toMatchObject({ kinds: ["note", "goal", "conversation"] });
+  const prompt = buildPrompt(ask);
+  expect(prompt).toContain("- conversation:");
+  expect(prompt).toContain("Prefer conversation over none");
+  expect(buildPrompt(req)).not.toContain("conversation");
+  expect(validateParse({ kind: "conversation", fields: { text: "Rename the Desk" } }, ask)).toEqual({ kind: "conversation", fields: { text: ask.text } });
+  expect(validateParse({ kind: "conversation" }, ask)).toEqual({ kind: "conversation", fields: { text: ask.text } });
+  expect(() => validateParse({ kind: "conversation" }, req)).toThrow("not asked for");
+});
+
 it("keeps the offered ref when the answer copies the label after it", () => {
   expect(validateParse({ kind: "task", fields: { title: "x", map: "the-metafactory/cortex#2770 (Desk)" } }, req))
     .toEqual({ kind: "task", fields: { title: "x", map: "the-metafactory/cortex#2770" } });

@@ -183,7 +183,7 @@ export interface DeskWriteResult {
 }
 
 /** The Desk parser contract: Cortex writes one DeskParseRequest to the parser's stdin. */
-export type DeskParseKind = DeskWriteKind;
+export type DeskParseKind = DeskWriteKind | "conversation";
 
 export interface DeskCreationParseRequest {
   operation?: "create";
@@ -210,6 +210,7 @@ export type BalanceParentResult = { kind: "balance-parent"; parent: string | nul
 export type DeskParseResult =
   | BalanceParentResult
   | DeskWriteRequest
+  | { kind: "conversation"; fields: { text: string } }
   | { kind: "none"; reason: string };
 
 /** The legacy Desk mail-action contract: Cortex writes this to the `mc.desk.mail.actions.trash` command's stdin when no move command is set. */

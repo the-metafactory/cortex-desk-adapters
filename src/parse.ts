@@ -1,7 +1,7 @@
 import type { BalanceParentRequest, DeskParseKind, DeskParseRequest, DeskParseResult } from "./contract";
 import { isRecord } from "./guards";
 
-const KINDS: DeskParseKind[] = ["reminder", "note", "task", "goal", "calendar"];
+const KINDS: DeskParseKind[] = ["reminder", "note", "task", "goal", "calendar", "conversation"];
 const isText = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 const isIso = (v: unknown): v is string => isText(v) && /^\d{4}-\d{2}-\d{2}/.test(v) && Number.isFinite(Date.parse(v));
 
@@ -25,6 +25,7 @@ const FIELDS: Record<DeskParseKind, string> = {
   task: '{ "title": string, "details"?: string, "map": one of the map refs below }',
   goal: '{ "wording": string, one line }',
   calendar: '{ "title": string, "start": ISO 8601 with offset, "end"?: ISO 8601 with offset, "allDay"?: boolean, "location"?: string, "notes"?: string }',
+  conversation: '{ "text": the text exactly as typed }',
 };
 
 /** The one-shot prompt: the request, the allowed shapes, and the rules for times and maps. */
@@ -47,6 +48,9 @@ export function buildPrompt(req: DeskParseRequest): string {
     `- Resolve relative times ("tomorrow at 9", "in 20 minutes", "Friday", "next week") against Now in ${req.timeZone}. Write every time as ISO 8601 with that zone's UTC offset, e.g. 2026-11-03T14:00:00+01:00.`,
     '- A weekday alone means the next such day after today. A day with no time is all-day for calendar ("allDay": true, start at 00:00).',
     "- Leave out optional fields you cannot read from the text. Do not invent details.",
+    ...(req.kinds.includes("conversation")
+      ? ["- Answer conversation when the text is a question, or asks to think, discuss, brainstorm, decide or explore something, rather than to save, remind, schedule or delegate it. Prefer conversation over none, and over note or goal when the person is asking rather than telling."]
+      : []),
     ...(req.kinds.includes("task")
       ? req.maps.length > 0
         ? [
@@ -100,6 +104,7 @@ export function validateParse(value: unknown, req: DeskParseRequest): DeskParseR
   }
   const kind = value.kind as DeskParseKind;
   if (!req.kinds.includes(kind)) throw new Error(`kind ${JSON.stringify(value.kind)} was not asked for`);
+  if (kind === "conversation") return { kind, fields: { text: req.text } };
   const f = value.fields;
   if (!isRecord(f)) throw new Error("answer has no fields");
   // A model sometimes copies the label after the ref ("owner/name#1 (Desk)"); keep the offered ref.
