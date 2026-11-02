@@ -153,6 +153,19 @@ describe("sendMail", () => {
     expect(calls[0]?.stdin).toContain("ssl-reqd");
     expect(calls[0]?.stdin).toContain('mail-rcpt = "olga@example.org"');
   });
+  test("authenticates with LOGIN, and tries PLAIN only when LOGIN fails before anything is sent", async () => {
+    const calls: string[] = [];
+    await sendMail(ACCOUNT, "olga@example.org", "msg", async (_argv, stdin) => { calls.push(stdin ?? ""); return { code: 0, stdout: "", stderr: "" }; });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain('login-options = "AUTH=LOGIN"');
+    const retried: string[] = [];
+    await sendMail(ACCOUNT, "olga@example.org", "msg", async (_argv, stdin) => { retried.push(stdin ?? ""); return retried.length === 1 ? { code: 94, stdout: "", stderr: "curl: (94) An authentication function returned an error" } : { code: 0, stdout: "", stderr: "" }; });
+    expect(retried.map((c) => /login-options = "AUTH=(\w+)"/.exec(c)?.[1])).toEqual(["LOGIN", "PLAIN"]);
+    const network: string[] = [];
+    await expect(sendMail(ACCOUNT, "olga@example.org", "msg", async (_argv, stdin) => { network.push(stdin ?? ""); return { code: 7, stdout: "", stderr: "curl: (7) Failed to connect" }; })).rejects.toThrow("Failed to connect");
+    expect(network).toHaveLength(1);
+    await expect(sendMail(ACCOUNT, "olga@example.org", "msg", async () => ({ code: 67, stdout: "", stderr: "curl: (67) Login denied" }))).rejects.toThrow("Login denied");
+  });
   test("a refused submission is a refusal with curl's reason", async () => {
     await expect(sendMail(ACCOUNT, "olga@example.org", "msg", async () => ({ code: 55, stdout: "", stderr: "curl: (55) Recipient rejected" }))).rejects.toThrow("Recipient rejected");
   });

@@ -62,13 +62,18 @@ export async function smtpAccount(name: string, run: Runner, path = emailConfigP
 
 const quoted = (value: string): string => `"${value.replace(/[\\"]/g, "\\$&")}"`;
 
+/** The password mechanisms tried in turn. curl would otherwise pick NTLM or GSSAPI when a server (Exchange) offers them. */
+export const SMTP_MECHANISMS = ["LOGIN", "PLAIN"] as const;
+const AUTH_FAILED = new Set([67, 94]);
+
 /** curl's config for one SMTP submission: implicit TLS for a secure account, else STARTTLS is required. */
-export function curlConfig(account: SmtpAccount, rcpt: string): string {
+export function curlConfig(account: SmtpAccount, rcpt: string, mechanism: (typeof SMTP_MECHANISMS)[number] = "LOGIN"): string {
   if (/[\r\n]/.test(account.user + account.pass + rcpt + account.from)) throw new Refusal("The SMTP settings hold a line break.");
   return [
     `url = ${quoted(`${account.secure ? "smtps" : "smtp"}://${account.host}:${account.port}`)}`,
     ...(account.secure ? [] : ["ssl-reqd"]),
     `user = ${quoted(`${account.user}:${account.pass}`)}`,
+    `login-options = ${quoted(`AUTH=${mechanism}`)}`,
     `mail-from = ${quoted(account.from)}`,
     `mail-rcpt = ${quoted(rcpt)}`,
   ].join("\n");
@@ -84,7 +89,11 @@ export async function sendMail(account: SmtpAccount, rcpt: string, message: stri
   try {
     const file = join(dir, "message.eml");
     await writeFile(file, message, { mode: 0o600 });
-    const result = await run(["curl", "-sS", "--max-time", "25", "-K", "-", "--upload-file", file], curlConfig(account, rcpt));
+    let result = { code: 1, stdout: "", stderr: "" };
+    for (const mechanism of SMTP_MECHANISMS) {
+      result = await run(["curl", "-sS", "--max-time", "25", "-K", "-", "--upload-file", file], curlConfig(account, rcpt, mechanism));
+      if (!AUTH_FAILED.has(result.code)) break;
+    }
     if (result.code !== 0) throw new Refusal(`The ${account.name} mail server did not take the reply: ${lastLine(result.stderr) || `curl exited with code ${result.code}`}`);
   } finally {
     await rm(dir, { recursive: true, force: true });
