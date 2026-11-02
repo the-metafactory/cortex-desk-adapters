@@ -65,7 +65,7 @@ export interface SentEnvelope {
 
 const ADDRESS = /^[^\s<>@,;]+@[^\s<>@,;]+$/;
 
-function address(a: EnvelopeAddress | undefined): DeskMailAddress | null {
+export function address(a: EnvelopeAddress | undefined): DeskMailAddress | null {
   const value = a?.address?.trim().toLowerCase();
   if (!value || !ADDRESS.test(value)) return null;
   const name = a?.name?.replace(/\s+/g, " ").trim();
