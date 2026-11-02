@@ -305,6 +305,22 @@ export interface DeskInviteReplyRequest {
 }
 
 /**
+ * The declined-copy contract (cortex#3112): after a decline went out, Cortex writes this to the command configured for the
+ * account under `mc.desk.mail.invitations.removeOnDecline`. The command removes the copy of the invitation that the
+ * calendar server placed by itself, matched by `uid` only; `start` and `end` (ISO 8601) bound the search. The answer is a
+ * DeskWriteResult, a refusal the last line of stderr.
+ */
+export interface DeskDeclinedCopyRequest {
+  action: "remove-declined";
+  account: string;
+  uid: string;
+  start: string;
+  end?: string;
+  /** The invitation carries RRULE or RDATE: the command removes the series. Without it a matching occurrence is refused. */
+  recurring?: boolean;
+}
+
+/**
  * The Desk report contract: Cortex writes this to the `mc.desk.mail.report.command` command's stdin for Report. The
  * command saves a draft to `to` with the original attached as message/rfc822, for the principal to send. It never sends.
  */
