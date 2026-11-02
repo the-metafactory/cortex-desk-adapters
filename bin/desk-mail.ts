@@ -9,8 +9,8 @@
  * listed too, as `sent` items with the replies found in INBOX and the archive, read-only.
  * For every listed message, read or unread, a text/calendar part that holds a meeting request becomes the item's
  * `invitation`, unless the account's Sent folders hold an iTIP REPLY for it (same UID, SEQUENCE at least as new) or the
- * event is over. Replies are looked for in Sent over max(--days, --invite-days) days. Beyond --days, INBOX mail of the last --invite-days days (default 14, at most 60) is read only for its
- * invitation: at most the newest --invite-scan messages (default 200, at most 1000) are scanned, and at most
+ * event is over. The look-back covers the longer of --days and --invite-days (default 14, at most 60): Sent for
+ * replies, and INBOX mail that --days and --limit did not list, read only for its invitation: at most the newest --invite-scan messages (default 200, at most 1000) are scanned, and at most
  * --invite-limit mails (default 10, at most 50) with an open invitation are added. No other older mail is listed.
  */
 import { parseArgs } from "node:util";

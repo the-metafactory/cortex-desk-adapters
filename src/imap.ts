@@ -365,9 +365,16 @@ export async function readInvitations(account: string, uids: number[], self: rea
   });
 }
 
-async function calendarTexts(client: ImapFlow, uids: number[], warn: (line: string) => void, query: { envelope?: boolean; flags?: boolean } = {}): Promise<{ uid: number; ics: string; envelope?: SentEnvelope; flags?: Set<string> }[]> {
+interface CalendarText {
+  uid: number;
+  ics: string;
+  envelope?: SentEnvelope;
+  flags?: Set<string>;
+}
+
+async function calendarTexts(client: ImapFlow, uids: number[], warn: (line: string) => void, query: { envelope?: boolean; flags?: boolean } = {}): Promise<CalendarText[]> {
   if (uids.length === 0) return [];
-  const out: { uid: number; ics: string; envelope?: SentEnvelope; flags?: Set<string> }[] = [];
+  const out: CalendarText[] = [];
   for (const m of await client.fetchAll(uids, { bodyStructure: true, ...query }, { uid: true })) {
     const part = calendarPart(m.bodyStructure as CalendarPartNode | undefined);
     if (!part) continue;
