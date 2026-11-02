@@ -2,7 +2,7 @@ import { expect, it } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { decodeKeychainPassword, type Ews, icalAccount, readDeclinedCopyRequest, removeDeclinedCopy } from "../src/exchange-decline";
+import { decodeKeychainPassword, type Ews, ewsTransport, icalAccount, readDeclinedCopyRequest, removeDeclinedCopy } from "../src/exchange-decline";
 import type { Runner } from "../src/run";
 import { Refusal } from "../src/writers";
 
@@ -92,11 +92,18 @@ it("removes a recurring invitation through its series master, once, after checki
   );
   await removeDeclinedCopy({ ...req, recurring: true }, fake.ews);
   expect(fake.deleted).toEqual(["M"]);
+  expect(fake.calls.filter((c) => c.includes("<m:GetItem"))).toHaveLength(1);
+});
+
+it("refuses an invitation for one meeting of a series, so the series stays", async () => {
+  const fake = exchange([{ id: "occ1", uid: req.uid, type: "Exception" }], { occ1: { id: "M", uid: req.uid, type: "RecurringMaster" } });
+  await expect(removeDeclinedCopy(req, fake.ews)).rejects.toThrow("This invitation is for one meeting of a series, so the Desk does not remove it from Exchange.");
+  expect(fake.calls.some((c) => c.includes("<m:GetItem") || c.includes("<m:DeleteItem"))).toBe(false);
 });
 
 it("refuses a series master with another UID", async () => {
   const fake = exchange([{ id: "occ1", uid: req.uid, type: "Occurrence" }], { occ1: { id: "M", uid: "someone-else" } });
-  await expect(removeDeclinedCopy(req, fake.ews)).rejects.toThrow("The series Exchange returned is not this invitation.");
+  await expect(removeDeclinedCopy({ ...req, recurring: true }, fake.ews)).rejects.toThrow("The series Exchange returned is not this invitation.");
   expect(fake.deleted).toEqual([]);
 });
 
@@ -146,6 +153,11 @@ it("reads the ical account and its keychain password without putting the passwor
   await expect(icalAccount("other", run, path)).rejects.toThrow("There is no Exchange account other in the ical config.");
   const failing: Runner = async () => ({ code: 44, stdout: "", stderr: "The specified item could not be found in the keychain." });
   await expect(icalAccount("me", failing, path)).rejects.toThrow("The Exchange password could not be read from the keychain");
+});
+
+it("fails on an answer that is not SOAP, such as a proxy login page, instead of reporting no copy", async () => {
+  const ews = ewsTransport({ url: "https://mail.example.org/EWS/Exchange.asmx", user: "u", pass: "p" }, 5_000, async () => new Response("<html>Sign in</html>", { status: 200 }));
+  await expect(removeDeclinedCopy(req, ews)).rejects.toThrow("Exchange answered HTTP 200 without a SOAP envelope.");
 });
 
 it("decodes a hex keychain password only when it holds non-ASCII text", () => {

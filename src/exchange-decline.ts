@@ -24,6 +24,7 @@ interface CalendarItem {
 const ACCOUNT = /^[\w.-]{1,64}$/;
 const UID = /^[^\r\n]{1,1000}$/;
 const DAY_MS = 86_400_000;
+const ORGANIZED = "You organize this event, so the Desk does not remove it.";
 const NS = 'xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types" xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"';
 
 export function readDeclinedCopyRequest(text: string): DeskDeclinedCopyRequest {
@@ -52,7 +53,7 @@ const unescapeXml = (s: string): string =>
     return String.fromCodePoint(lower.startsWith("#x") ? Number.parseInt(lower.slice(2), 16) : Number.parseInt(lower.slice(1), 10));
   });
 
-export const envelope = (body: string): string =>
+const envelope = (body: string): string =>
   `<?xml version="1.0" encoding="utf-8"?><soap:Envelope ${NS}><soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header><soap:Body>${body}</soap:Body></soap:Envelope>`;
 
 const elements = (xml: string, name: string): string[] => [...xml.matchAll(new RegExp(`<(?:\\w+:)?${name}\\b[^>]*?(?:/>|>([\\s\\S]*?)</(?:\\w+:)?${name}>)`, "g"))].map((m) => m[0]);
@@ -114,20 +115,21 @@ async function seriesMaster(item: CalendarItem, uid: string, ews: Ews): Promise<
 
 /**
  * Removes the copy of a declined invitation that Exchange placed on the calendar: only items whose UID is the
- * invitation's, found around its time; a recurring one through its series master. Items move to Deleted Items and
- * nothing goes to the organizer. Items the principal organizes are refused. A second run finds nothing and says so.
+ * invitation's, found around its time. A recurring invitation removes its series master; an invitation for one meeting
+ * of a series is refused, so the series stays. Items move to Deleted Items and nothing goes to the organizer. Items the
+ * principal organizes are refused. A second run finds nothing and says so.
  */
 export async function removeDeclinedCopy(req: DeskDeclinedCopyRequest, ews: Ews): Promise<DeskWriteResult> {
   const copies = await findCopies(req, ews);
-  if (copies.some((c) => c.organizer)) throw new Refusal("You organize this event, so the Desk does not remove it.");
-  const targets = new Map<string, CalendarItem>();
-  for (const copy of copies) {
-    const target = copy.type === "Occurrence" || copy.type === "Exception" ? await seriesMaster(copy, req.uid, ews) : copy;
-    if (target.organizer) throw new Refusal("You organize this event, so the Desk does not remove it.");
-    targets.set(target.id, target);
-  }
+  if (copies.some((c) => c.organizer)) throw new Refusal(ORGANIZED);
+  const singles = copies.filter((c) => c.type !== "Occurrence" && c.type !== "Exception");
+  const occurrence = copies.find((c) => c.type === "Occurrence" || c.type === "Exception");
+  if (occurrence && !req.recurring) throw new Refusal("This invitation is for one meeting of a series, so the Desk does not remove it from Exchange.");
+  const master = occurrence ? await seriesMaster(occurrence, req.uid, ews) : undefined;
+  if (master?.organizer) throw new Refusal(ORGANIZED);
+  const targets = new Set([...singles, ...(master ? [master] : [])].map((c) => c.id));
   if (targets.size === 0) return { id: req.uid, message: "Your Exchange calendar holds no copy of this invitation." };
-  const ids = [...targets.keys()].map((id) => `<t:ItemId Id="${escapeXml(id)}"/>`).join("");
+  const ids = [...targets].map((id) => `<t:ItemId Id="${escapeXml(id)}"/>`).join("");
   await call(ews, `<m:DeleteItem DeleteType="MoveToDeletedItems" SendMeetingCancellations="SendToNone"><m:ItemIds>${ids}</m:ItemIds></m:DeleteItem>`);
   return { id: req.uid, message: "Exchange's tentative copy is removed from your calendar." };
 }
@@ -163,12 +165,14 @@ export async function icalAccount(name: string, run: Runner, path = icalConfigPa
   return { url: account.url, user, pass };
 }
 
-export function ewsTransport(account: EwsAccount, timeoutMs = 20_000): Ews {
+export type Post = (url: string, init: RequestInit) => Promise<Response>;
+
+export function ewsTransport(account: EwsAccount, timeoutMs = 20_000, post: Post = fetch): Ews {
   const authorization = `Basic ${Buffer.from(`${account.user}:${account.pass}`).toString("base64")}`;
   return async (body) => {
-    const res = await fetch(account.url, { method: "POST", headers: { "content-type": "text/xml; charset=utf-8", authorization }, body, signal: AbortSignal.timeout(timeoutMs) });
+    const res = await post(account.url, { method: "POST", headers: { "content-type": "text/xml; charset=utf-8", authorization }, body, signal: AbortSignal.timeout(timeoutMs) });
     const xml = await res.text();
-    if (!res.ok && !xml.includes("Envelope")) throw new Error(`Exchange answered HTTP ${res.status}.`);
+    if (!xml.includes("Envelope")) throw new Error(`Exchange answered HTTP ${res.status} without a SOAP envelope.`);
     return xml;
   };
 }

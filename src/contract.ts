@@ -316,6 +316,7 @@ export interface DeskDeclinedCopyRequest {
   uid: string;
   start: string;
   end?: string;
+  /** The invitation carries RRULE or RDATE: the command removes the series. Without it a matching occurrence is refused. */
   recurring?: boolean;
 }
 
