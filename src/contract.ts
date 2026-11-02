@@ -38,6 +38,29 @@ export interface DeskSourceMail {
   headers?: DeskMailHeaders;
   /** Links in the HTML body whose text names a host (at most 20), for the Desk's phishing check. Untrusted data. */
   links?: DeskMailLink[];
+  /** The calendar invitation (iTIP METHOD:REQUEST) the mail carries, read from its text/calendar part. Untrusted data. */
+  invitation?: DeskMailInvitation;
+}
+
+/** An attendee's participation status (RFC 5545 PARTSTAT for events). */
+export type DeskPartStat = "NEEDS-ACTION" | "ACCEPTED" | "DECLINED" | "TENTATIVE" | "DELEGATED";
+
+/** A meeting request read from a mail's text/calendar part. Times are ISO 8601 instants. */
+export interface DeskMailInvitation {
+  method: "REQUEST";
+  uid: string;
+  sequence: number;
+  summary: string;
+  start: string;
+  end?: string;
+  allDay?: boolean;
+  location?: string;
+  organizer: { address: string; name?: string };
+  /** The principal among the attendees, matched by the account's own addresses; absent when they are not listed. */
+  attendee?: { address: string; status: DeskPartStat; rsvp?: boolean };
+  recurring?: boolean;
+  /** How many attendees the request lists. */
+  attendees: number;
 }
 
 /** One link: the text a reader sees and the http(s) address it opens. */
@@ -256,6 +279,21 @@ export interface DeskMailDraftRequest {
  * The Desk report contract: Cortex writes this to the `mc.desk.mail.report.command` command's stdin for Report. The
  * command saves a draft to `to` with the original attached as message/rfc822, for the principal to send. It never sends.
  */
+/**
+ * The Desk invitation-reply contract: Cortex writes this to the `mc.desk.mail.invitations.command` command's stdin after
+ * the person confirmed the answer. The command sends the iTIP REPLY to the organizer. `uid` is the invitation's UID as the
+ * mail source reported it; the command refuses when the mail's invitation has another.
+ */
+export interface DeskInviteReplyRequest {
+  action: "invite-reply";
+  account: string;
+  messageId: string;
+  uid: string;
+  reply: "accept" | "decline";
+  /** The same for every retry of one confirmed answer: a command sends nothing for a request id it already sent. */
+  requestId: string;
+}
+
 export interface DeskMailReportRequest {
   action: "report";
   account: string;

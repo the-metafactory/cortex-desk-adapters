@@ -1,7 +1,8 @@
 import { ImapFlow } from "imapflow";
 import type { ImapAccount } from "./imap-account";
 import { imapAccount } from "./imap-account";
-import type { DeskMailHeaders, DeskMailLink, DeskSourceSentMail } from "./contract";
+import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceSentMail } from "./contract";
+import { calendarPart, parseInvitation, type CalendarPartNode } from "./invitation";
 import { linksOf } from "./links";
 import { MAX_ORIGINAL, TOO_LARGE, type PhishingReportBox } from "./report";
 import { HEADER_FIELDS, headersOf, messageIds } from "./mail-headers";
@@ -327,5 +328,56 @@ export async function readSent(account: string, options: SentOptions): Promise<D
       });
     }
     return sent.sort((a, b) => Date.parse(b.sentAt) - Date.parse(a.sentAt));
+  });
+}
+
+const CALENDAR_BYTES = 256 * 1024;
+
+async function downloadText(client: ImapFlow, uid: number, part: string, maxBytes: number): Promise<string> {
+  const { content } = await client.download(String(uid), part, { uid: true, maxBytes });
+  const chunks: Buffer[] = [];
+  for await (const chunk of content) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** The calendar invitations of these INBOX UIDs, read-only (EXAMINE, BODY.PEEK), so no message is marked read. */
+export async function readInvitations(account: string, uids: number[], self: readonly string[], warn: (line: string) => void = () => undefined, mailbox = "INBOX"): Promise<Map<number, DeskMailInvitation>> {
+  const out = new Map<number, DeskMailInvitation>();
+  if (uids.length === 0) return out;
+  return withImapClient(account, async (client) => {
+    const lock = await client.getMailboxLock(mailbox, { readOnly: true });
+    try {
+      for (const m of await client.fetchAll(uids, { bodyStructure: true }, { uid: true })) {
+        const part = calendarPart(m.bodyStructure as CalendarPartNode | undefined);
+        if (!part) continue;
+        try {
+          const invitation = parseInvitation(await downloadText(client, m.uid, part, CALENDAR_BYTES), self);
+          if (invitation) out.set(m.uid, invitation);
+        } catch (err) {
+          warn(`the invitation of message ${m.uid} was not read: ${errorText(err)}`);
+        }
+      }
+    } finally {
+      lock.release();
+    }
+    return out;
+  });
+}
+
+/** The text/calendar part of the one INBOX message with this Message-ID, read-only; undefined when it carries none. */
+export async function invitationSource(account: string, messageId: string, mailbox = "INBOX"): Promise<string | undefined> {
+  return withImapClient(account, async (client) => {
+    const lock = await client.getMailboxLock(mailbox, { readOnly: true });
+    try {
+      const found = (await client.search({ header: { "message-id": messageId } }, { uid: true })) || [];
+      const exact = found.length ? (await client.fetchAll(found, { envelope: true, bodyStructure: true }, { uid: true })).filter((m) => bareMessageId(m.envelope?.messageId ?? "") === messageId) : [];
+      const [only, ...others] = exact;
+      if (!only) throw new Refusal(`The invitation is no longer in the ${account} ${mailbox}.`);
+      if (others.length > 0) throw new Refusal(`${exact.length} messages in the ${account} ${mailbox} share this Message-ID, so none was answered.`);
+      const part = calendarPart(only.bodyStructure as CalendarPartNode | undefined);
+      return part ? await downloadText(client, only.uid, part, CALENDAR_BYTES) : undefined;
+    } finally {
+      lock.release();
+    }
   });
 }

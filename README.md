@@ -22,6 +22,7 @@ A source prints `{ "events"?: [...], "items"?: [...] }` on stdout and exits 0. T
 - An **event** has an `id`, an ISO 8601 `start`, a `title`, and optionally `end`, `allDay`, `location`, `online` and `url`.
 - A **mail item** has `kind: "mail"`, the Message-ID as `id`, `from`, `subject`, `receivedAt`, `unread`, and optionally `firstParagraph`, `url`, `account`, `headers` and `links`.
 - `headers` (`DeskMailHeaders`) holds what later Desk steps read from the message headers: `listId`, `listUnsubscribe`, `listUnsubscribePost`, `authResults` (`{ spf?, dkim?, dmarc?, dkimDomains?, spfDomain? }`, the verdicts of the topmost Authentication-Results header, the signing domains of its passing DKIM signatures, and the domain SPF checked, from smtp.mailfrom), `replyTo` and `inReplyTo`. Every field is optional. Cortex treats the values as untrusted data and drops a malformed field without dropping the mail.
+- `invitation` (`DeskMailInvitation`) is the meeting request a mail carries in a text/calendar part (iTIP `METHOD:REQUEST`): `uid`, `sequence`, `summary`, `start`, `end`, `allDay`, `location`, `organizer`, `attendee` (the principal, found by the account's own addresses, with `status`, the PARTSTAT), `recurring` and the number of `attendees`. `desk-mail` reads it for the same unread messages it reads bodies for, read-only. A cancellation, a reply or a request without UID, start or organizer is not an invitation.
 - `links` (`DeskMailLink[]`, at most 20) are the links of the HTML body whose whole visible text names a host, as `{ text, href }`, for the Desk's phishing check.
 - Links must be `http:`, `https:` or `message:` (Apple Mail). Cortex drops entries that do not match and reports how many it dropped.
 
@@ -197,6 +198,21 @@ mc:
       report:
         command: [/path/to/cortex-desk-adapters/bin/desk-mail-report.ts]
         to: reports@example.org
+```
+
+### Invitations
+
+With `mc.desk.mail.invitations` set, a mail item with an `invitation` offers Accept, Decline and Propose times. Accept and Decline run `mc.desk.mail.invitations.command` without a shell, after the person confirmed the answer, with `{ "action": "invite-reply", "account", "messageId", "uid", "reply": "accept" | "decline", "requestId" }` (`DeskInviteReplyRequest`) on stdin. Exit 0 means the reply went out; the command prints `{ "id", "message" }`. Otherwise the last line of stderr is shown and the Desk records the answer as not sent. Propose times needs no command: the Desk saves a reply draft through the draft command.
+
+`desk-mail-invite [--mailbox INBOX]` is that command for the `email` CLI's accounts. It reads the mail's text/calendar part again from INBOX (EXAMINE, `BODY.PEEK`), refuses when its UID is not the one the request names, when the account's From address or SMTP user is not an attendee, or when the Message-ID matches no message or more than one. It then sends an iMIP message (RFC 6047) to the organizer: a short text part and a `text/calendar; method=REPLY` part with the request's VTIMEZONEs, UID, SEQUENCE, times, ORGANIZER and SUMMARY, a new DTSTAMP and one ATTENDEE, the principal, with `PARTSTAT=ACCEPTED` or `DECLINED` (RFC 5546). It submits the message through the account's SMTP server with curl (STARTTLS required unless the account is `secure`); the password reaches curl on stdin, never in argv. It keeps the request ids it sent in `$XDG_STATE_HOME/cortex-desk-adapters/invite-replies.json` for 30 days, so a retry of one confirmed answer sends nothing. It never moves, deletes or changes mail, and it does not touch a calendar: the Desk adds an accepted event through its calendar writer where the stack asks for it. A server that places invitations on the calendar by itself (Exchange) keeps its own copy.
+
+```yaml
+mc:
+  desk:
+    mail:
+      invitations:
+        command: [/path/to/cortex-desk-adapters/bin/desk-mail-invite.ts]
+        addToCalendar: [personal]
 ```
 
 ### DMARC reports
