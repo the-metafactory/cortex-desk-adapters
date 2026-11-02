@@ -85,7 +85,7 @@ function recipients(env: SentEnvelope): DeskMailAddress[] {
 }
 
 /** One sent message as a Desk `sent` item, or null without a Message-ID, a sender or a recipient. */
-export function toSentMail(env: SentEnvelope, account: string, more: { text?: string; references?: string[] } = {}): DeskSourceSentMail | null {
+export function toSentMail(env: SentEnvelope, account: string, references: readonly string[] = []): DeskSourceSentMail | null {
   const id = env.messageId ? bareMessageId(env.messageId) : "";
   const from = address(env.from?.[0]);
   const to = recipients(env);
@@ -99,11 +99,10 @@ export function toSentMail(env: SentEnvelope, account: string, more: { text?: st
     to,
     subject,
     sentAt: env.date.toISOString(),
-    ...(more.text ? { text: more.text } : {}),
     url: appleMailUrl(id),
     account,
     ...(inReplyTo ? { inReplyTo } : {}),
-    ...(more.references?.length ? { references: more.references } : {}),
+    ...(references.length ? { references: [...references] } : {}),
   };
 }
 

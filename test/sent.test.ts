@@ -28,7 +28,7 @@ describe("toSentMail", () => {
     const item = toSentMail(
       { messageId: "<s1@example.org>", inReplyTo: "<p0@example.org>", subject: "Venue  quote", date: sentAt, from: [me], to: [{ name: "Priya Shah", address: "Priya@Example.org" }], cc: [{ address: "priya@example.org" }, { address: "lee@example.org" }] },
       "personal",
-      { text: "Does it include catering?", references: ["p0@example.org"] },
+      ["p0@example.org"],
     );
     expect(item).toEqual({
       kind: "sent",
@@ -37,7 +37,6 @@ describe("toSentMail", () => {
       to: [{ name: "Priya Shah", address: "priya@example.org" }, { address: "lee@example.org" }],
       subject: "Venue quote",
       sentAt: sentAt.toISOString(),
-      text: "Does it include catering?",
       url: "message://%3Cs1%40example.org%3E",
       account: "personal",
       inReplyTo: "p0@example.org",

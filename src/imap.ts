@@ -163,7 +163,7 @@ export async function readLinks(account: string, uids: number[], warn: (line: st
           const links = linksOf(Buffer.concat(chunks).toString("utf8"));
           if (links.length > 0) out.set(m.uid, links);
         } catch (err) {
-          warn(`the links of message ${m.uid} were not read: ${err instanceof Error ? err.message : String(err)}`);
+          warn(`the links of message ${m.uid} were not read: ${errorText(err)}`);
         }
       }
     } finally {
@@ -221,6 +221,8 @@ export interface SentOptions {
 }
 
 const DAY_MS = 86_400_000;
+
+export const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 const MAX_CANDIDATES = 1000;
 const TEXT_BYTES = 8192;
 
@@ -261,7 +263,7 @@ const sentIn = (client: ImapFlow, path: string, since: Date, limit: number, acco
     if (uids.length === 0) return [];
     const messages = await client.fetchAll(uids, { envelope: true, bodyStructure: true, headers: ["references"] }, { uid: true });
     return messages.flatMap((m) => {
-      const item = m.envelope ? toSentMail(m.envelope, account, { references: referencesOf(m) }) : null;
+      const item = m.envelope ? toSentMail(m.envelope, account, referencesOf(m)) : null;
       return item ? [{ path, uid: m.uid, structure: m.bodyStructure as StructureNode | undefined, item }] : [];
     });
   });
@@ -294,7 +296,7 @@ export async function readSent(account: string, options: SentOptions): Promise<D
       try {
         listed.push(...(await sentIn(client, path, since, options.limit, account)));
       } catch (err) {
-        warn(`sent mail in ${path} was not read: ${err instanceof Error ? err.message : String(err)}`);
+        warn(`sent mail in ${path} was not read: ${errorText(err)}`);
       }
     }
     const byId = new Map<string, Listed>();
@@ -308,7 +310,7 @@ export async function readSent(account: string, options: SentOptions): Promise<D
       try {
         candidates.push(...(await candidatesIn(client, folder, since)));
       } catch (err) {
-        warn(`replies in ${folder} were not read, so sent mail is not listed: ${err instanceof Error ? err.message : String(err)}`);
+        warn(`replies in ${folder} were not read, so sent mail is not listed: ${errorText(err)}`);
         return [];
       }
     }
@@ -320,7 +322,7 @@ export async function readSent(account: string, options: SentOptions): Promise<D
           sent.push(withReplies(text ? { ...l.item, text } : l.item, candidates));
         }
       }).catch((err: unknown) => {
-        warn(`the text of sent mail in ${path} was not read: ${err instanceof Error ? err.message : String(err)}`);
+        warn(`the text of sent mail in ${path} was not read: ${errorText(err)}`);
         for (const l of newest.filter((x) => x.path === path)) sent.push(withReplies(l.item, candidates));
       });
     }

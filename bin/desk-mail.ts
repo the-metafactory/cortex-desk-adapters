@@ -11,7 +11,7 @@
 import { parseArgs } from "node:util";
 import { toDeskMail, firstParagraph, type EmailListEntry } from "../src/mail";
 import type { DeskMailHeaders, DeskMailLink, DeskSourceMail, DeskSourceOutput, DeskSourceSentMail } from "../src/contract";
-import { readHeaders, readLinks, readSent } from "../src/imap";
+import { errorText, readHeaders, readLinks, readSent } from "../src/imap";
 
 const { values } = parseArgs({
   options: {
@@ -58,7 +58,7 @@ for (const account of values.account ?? []) {
   }
   const warn = (line: string): void => void process.stderr.write(`desk-mail: ${account}: ${line}\n`);
   const orEmpty = <V>(what: string) => (err: unknown): Map<number, V> => {
-    warn(`${what} were not read: ${err instanceof Error ? err.message : String(err)}`);
+    warn(`${what} were not read: ${errorText(err)}`);
     return new Map();
   };
   const [headers, links] = await Promise.all([
@@ -75,7 +75,7 @@ for (const account of values.account ?? []) {
     try {
       items.push(...(await readSent(account, { days: sentDays, limit: sentLimit, warn })));
     } catch (err) {
-      warn(`sent mail was not read: ${err instanceof Error ? err.message : String(err)}`);
+      warn(`sent mail was not read: ${errorText(err)}`);
     }
   }
 }
