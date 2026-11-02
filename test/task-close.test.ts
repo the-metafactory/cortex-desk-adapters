@@ -1,6 +1,6 @@
 import { expect, it } from "bun:test";
 import type { Runner } from "../src/run";
-import { closeComment, closeMarker, closeTask, readCloseRequest } from "../src/task-close";
+import { closeComment, closeMarker, closeTask, parseRef, readCloseRequest } from "../src/task-close";
 import { Refusal } from "../src/writers";
 
 type Answer = { code?: number; stdout?: string; stderr?: string };
@@ -59,6 +59,16 @@ it("refuses a task in another repo, an unlabelled issue, and no --map, without c
 it("reports a failed close as a refusal sentence", async () => {
   const fake = gh(open, { on: "close", answer: { stderr: "HTTP 502\nGraphQL: Something went wrong" } });
   await expect(closeTask(approved, { gh: "gh", run: fake.run, maps })).rejects.toThrow("gh could not close jcfischer/desk#7: GraphQL: Something went wrong");
+});
+
+it("closes in a map given as a qualified ref, and compares repos without case", async () => {
+  const fake = gh(open);
+  await closeTask({ ...approved, task: "jcfischer/Desk#7" }, { gh: "gh", run: fake.run, maps: ["github:github.com/jcfischer/desk#1"] });
+  expect(fake.calls[0]?.slice(0, 6)).toEqual(["gh", "issue", "view", "7", "-R", "jcfischer/Desk"]);
+  const ghe = gh(open);
+  await closeTask({ ...approved, task: "github:git.example.org/team/desk#7" }, { gh: "gh", run: ghe.run, maps: ["github:git.example.org/team/desk#1"] });
+  expect(ghe.calls[0]?.slice(4, 6)).toEqual(["-R", "git.example.org/team/desk"]);
+  expect(parseRef("desk#7")).toBeNull();
 });
 
 it("reads only a well-formed close request", () => {

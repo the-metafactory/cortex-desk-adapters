@@ -3,7 +3,27 @@ import { isRecord } from "./guards";
 import { lastLine, type Runner } from "./run";
 import { Refusal, TASK_LABEL } from "./writers";
 
-const TASK_REF = /^([\w.-]+\/[\w.-]+)#([1-9]\d*)$/;
+const PLAIN_REF = /^([\w.-]+\/[\w.-]+)#([1-9]\d*)$/;
+const QUALIFIED_REF = /^github:([\w.-]+)\/([\w.-]+\/[\w.-]+)#([1-9]\d*)$/;
+const NOT_A_REF = "is not a ref like owner/name#123 or github:host/owner/name#123.";
+
+interface Ref {
+  /** As gh -R takes it: owner/name on github.com, else host/owner/name. */
+  repo: string;
+  /** host/owner/name in lower case, to compare a task with a map. */
+  key: string;
+  num: string;
+}
+
+/** An owner/name#N ref (github.com) or a qualified github:host/owner/name#N, as desk-task files them. */
+export function parseRef(ref: string): Ref | null {
+  const plain = PLAIN_REF.exec(ref);
+  if (plain?.[1] && plain[2]) return { repo: plain[1], key: `github.com/${plain[1]}`.toLowerCase(), num: plain[2] };
+  const q = QUALIFIED_REF.exec(ref);
+  if (!q?.[1] || !q[2] || !q[3]) return null;
+  const host = q[1].toLowerCase();
+  return { repo: host === "github.com" ? q[2] : `${host}/${q[2]}`, key: `${host}/${q[2]}`.toLowerCase(), num: q[3] };
+}
 const RECEIPT = /^[\w:.-]{1,100}$/;
 const OUTCOMES = { approved: { word: "Approved", reason: "completed", said: "done" }, discarded: { word: "Discarded", reason: "not planned", said: "not planned" } } as const;
 
@@ -17,7 +37,7 @@ export function readCloseRequest(text: string): DeskTaskCloseRequest {
   }
   if (!isRecord(body) || body.action !== "close") throw new Refusal("This command only closes tasks.");
   const { task, outcome, receipt } = body;
-  if (typeof task !== "string" || !TASK_REF.test(task)) throw new Refusal("The task is not a ref like owner/name#123.");
+  if (typeof task !== "string" || !parseRef(task)) throw new Refusal(`The task ${NOT_A_REF}`);
   if (outcome !== "approved" && outcome !== "discarded") throw new Refusal("The outcome is not approved or discarded.");
   if (typeof receipt !== "string" || !RECEIPT.test(receipt)) throw new Refusal("The receipt is not 1 to 100 letters, digits, colons, dots, dashes or underscores.");
   return { action: "close", task, outcome, receipt };
@@ -28,12 +48,6 @@ export const closeMarker = (receipt: string): string => `<!-- desk:close ${recei
 /** The only text the close leaves on the task: the decision and the Desk receipt, never mail content. */
 export const closeComment = (outcome: DeskTaskCloseRequest["outcome"], receipt: string): string =>
   `${OUTCOMES[outcome].word} on the Cortex Desk. Desk receipt: ${receipt}.\n\n${closeMarker(receipt)}`;
-
-const repoOf = (map: string): string => {
-  const m = TASK_REF.exec(map);
-  if (!m?.[1]) throw new Refusal(`"${map}" is not a map ref like owner/name#123.`);
-  return m[1];
-};
 
 interface Issue {
   state: string;
@@ -67,23 +81,27 @@ export interface CloseOptions {
  */
 export async function closeTask(req: DeskTaskCloseRequest, opts: CloseOptions): Promise<DeskWriteResult> {
   if (opts.maps.length === 0) throw new Refusal("No --map is set, so this command may close nothing.");
-  const m = TASK_REF.exec(req.task);
-  const repo = m?.[1];
-  const num = m?.[2];
-  if (!repo || !num) throw new Refusal("The task is not a ref like owner/name#123.");
-  if (!opts.maps.map(repoOf).includes(repo)) throw new Refusal(`The task ${req.task} is not on a map this command may close in.`);
-  const viewed = await opts.run([opts.gh, "issue", "view", num, "-R", repo, "--json", "state,stateReason,labels,comments,url"]);
-  if (viewed.code !== 0) throw new Refusal(`gh could not read ${req.task}: ${lastLine(viewed.stderr) || `exit ${viewed.code}`}`);
-  const issue = issueOf(viewed.stdout);
+  const task = parseRef(req.task);
+  if (!task) throw new Refusal(`The task ${NOT_A_REF}`);
+  const mapKeys = opts.maps.map((map) => {
+    const ref = parseRef(map);
+    if (!ref) throw new Refusal(`The map "${map}" ${NOT_A_REF}`);
+    return ref.key;
+  });
+  if (!mapKeys.includes(task.key)) throw new Refusal(`The task ${req.task} is not on a map this command may close in.`);
+  const gh = async (verb: string, sub: string[], flags: string[]): Promise<string> => {
+    const out = await opts.run([opts.gh, "issue", ...sub, task.num, "-R", task.repo, ...flags]);
+    if (out.code !== 0) throw new Refusal(`gh could not ${verb} ${req.task}: ${lastLine(out.stderr) || `exit ${out.code}`}`);
+    return out.stdout;
+  };
+  const issue = issueOf(await gh("read", ["view"], ["--json", "state,stateReason,labels,comments,url"]));
   const url = issue.url && /^https?:/i.test(issue.url) ? { url: issue.url } : {};
   if (!issue.labels.includes(TASK_LABEL)) throw new Refusal(`${req.task} is not a Desk task (no ${TASK_LABEL} label), so it is left open.`);
   if (issue.state.toUpperCase() !== "OPEN") return { id: req.task, ...url, message: `${req.task} was already closed; nothing changed.` };
   const outcome = OUTCOMES[req.outcome];
   if (!issue.comments.some((c) => c.includes(closeMarker(req.receipt)))) {
-    const commented = await opts.run([opts.gh, "issue", "comment", num, "-R", repo, "--body", closeComment(req.outcome, req.receipt)]);
-    if (commented.code !== 0) throw new Refusal(`gh could not comment on ${req.task}: ${lastLine(commented.stderr) || `exit ${commented.code}`}`);
+    await gh("comment on", ["comment"], ["--body", closeComment(req.outcome, req.receipt)]);
   }
-  const closed = await opts.run([opts.gh, "issue", "close", num, "-R", repo, "--reason", outcome.reason]);
-  if (closed.code !== 0) throw new Refusal(`gh could not close ${req.task}: ${lastLine(closed.stderr) || `exit ${closed.code}`}`);
+  await gh("close", ["close"], ["--reason", outcome.reason]);
   return { id: req.task, ...url, message: `Closed ${req.task} as ${outcome.said}.` };
 }
