@@ -9,9 +9,19 @@ const TEXT_FIELDS = {
   inReplyTo: { name: "in-reply-to", max: 1000 },
 } as const;
 
+const MAX_REFERENCES = 20;
+const MESSAGE_ID_IN = /<([^<>\s]{1,512})>/g;
+
+/** The Message-IDs in a References or In-Reply-To value, without angle brackets, the last `max` (the closest ancestors). */
+export function messageIds(value: string | undefined, max = MAX_REFERENCES): string[] {
+  if (!value) return [];
+  const ids = [...new Set([...value.matchAll(MESSAGE_ID_IN)].flatMap((m) => (m[1] ? [m[1]] : [])))];
+  return ids.slice(-max);
+}
+
 type TextField = keyof typeof TEXT_FIELDS;
 
-export const HEADER_FIELDS: string[] = [...Object.values(TEXT_FIELDS).map((f) => f.name), "authentication-results"];
+export const HEADER_FIELDS: string[] = [...Object.values(TEXT_FIELDS).map((f) => f.name), "authentication-results", "references"];
 
 const VERDICTS: readonly DeskAuthVerdict[] = ["pass", "fail", "softfail", "neutral", "none", "temperror", "permerror", "policy"];
 
@@ -104,6 +114,8 @@ export function parseMailHeaders(raw: string, trustedAuthserv: readonly string[]
     const value = fields.get(name)?.[0];
     if (value && value.length <= max) headers[key] = value;
   }
+  const references = messageIds(fields.get("references")?.[0]);
+  if (references.length > 0) headers.references = references;
   const auth = authResults(fields.get("authentication-results"), trustedAuthserv);
   if (auth) headers.authResults = auth;
   return Object.keys(headers).length > 0 ? headers : undefined;

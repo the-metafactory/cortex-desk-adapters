@@ -4,9 +4,12 @@ import { imapAccount } from "./imap-account";
 import type { DeskMailHeaders, DeskMailLink } from "./contract";
 import { linksOf } from "./links";
 import { MAX_ORIGINAL, TOO_LARGE, type PhishingReportBox } from "./report";
-import { HEADER_FIELDS, headersOf } from "./mail-headers";
+import { HEADER_FIELDS, headersOf, messageIds } from "./mail-headers";
 import { ReportRefusal, type Attachment, type ReportMailbox } from "./dmarc";
-import { bareMessageId, type Mailbox } from "./move";
+import { bareMessageId, folderByUse, type Mailbox } from "./move";
+import { textPart, type StructureNode } from "./imap-mail";
+import { ARCHIVE_NAMES, replyCandidate, sentFolders, sentText, toSentMail, withReplies, type ReplyCandidate } from "./sent";
+import type { DeskSourceSentMail } from "./contract";
 import { spawnRunner } from "./run";
 import { Refusal } from "./writers";
 
@@ -209,4 +212,83 @@ export const phishingReportBox = (client: ImapFlow, account: string): PhishingRe
 /** Runs `work` on a PhishingReportBox for one account: originals are read with EXAMINE and BODY.PEEK; the draft goes to Drafts. */
 export function withPhishingReportBox<T>(account: string, work: (box: PhishingReportBox, user: string) => Promise<T>): Promise<T> {
   return imapAccount(account, spawnRunner).then((acct) => withImapClient(account, (client) => work(phishingReportBox(client, account), acct.user)));
+}
+
+export interface SentOptions {
+  days: number;
+  limit: number;
+  now?: number;
+  warn?: (line: string) => void;
+}
+
+const DAY_MS = 86_400_000;
+const MAX_CANDIDATES = 1000;
+const TEXT_BYTES = 8192;
+
+const referencesOf = (m: { headers?: Buffer }): string[] => messageIds(m.headers?.toString("utf8"));
+
+async function sentBody(client: ImapFlow, uid: number, structure: StructureNode | undefined): Promise<string | undefined> {
+  const part = textPart(structure);
+  if (!part) return undefined;
+  const { content } = await client.download(String(uid), part, { uid: true, maxBytes: TEXT_BYTES });
+  const chunks: Buffer[] = [];
+  for await (const chunk of content) chunks.push(Buffer.from(chunk));
+  return sentText(Buffer.concat(chunks).toString("utf8"));
+}
+
+async function candidatesIn(client: ImapFlow, folder: string, since: Date): Promise<ReplyCandidate[]> {
+  const lock = await client.getMailboxLock(folder, { readOnly: true });
+  try {
+    const uids = ((await client.search({ since }, { uid: true })) || []).sort((a, b) => b - a).slice(0, MAX_CANDIDATES);
+    if (uids.length === 0) return [];
+    const messages = await client.fetchAll(uids, { envelope: true, headers: ["references"] }, { uid: true });
+    return messages.flatMap((m) => (m.envelope ? replyCandidate(m.envelope, referencesOf(m)) ?? [] : []));
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * The account's sent mail of the last `days` days (newest `limit`), read-only (EXAMINE, BODY.PEEK), each with the
+ * replies found in INBOX and the archive folder. Without a Sent folder it warns and lists nothing.
+ */
+export async function readSent(account: string, options: SentOptions): Promise<DeskSourceSentMail[]> {
+  const warn = options.warn ?? (() => undefined);
+  const since = new Date((options.now ?? Date.now()) - options.days * DAY_MS);
+  return withImapClient(account, async (client) => {
+    const boxes = (await client.list()).map((b) => ({ path: b.path, name: b.name, ...(b.specialUse ? { specialUse: b.specialUse } : {}) }));
+    const sentPaths = sentFolders(boxes);
+    if (sentPaths.length === 0) {
+      warn("no Sent folder was found, so sent mail is not listed");
+      return [];
+    }
+    const byId = new Map<string, DeskSourceSentMail>();
+    for (const path of sentPaths) {
+      const lock = await client.getMailboxLock(path, { readOnly: true });
+      try {
+        const uids = ((await client.search({ since }, { uid: true })) || []).sort((a, b) => b - a).slice(0, options.limit);
+        if (uids.length === 0) continue;
+        for (const m of await client.fetchAll(uids, { envelope: true, bodyStructure: true, headers: ["references"] }, { uid: true })) {
+          if (!m.envelope) continue;
+          const text = await sentBody(client, m.uid, m.bodyStructure as StructureNode | undefined).catch(() => undefined);
+          const item = toSentMail(m.envelope, account, { ...(text ? { text } : {}), references: referencesOf(m) });
+          if (item && !byId.has(item.id)) byId.set(item.id, item);
+        }
+      } finally {
+        lock.release();
+      }
+    }
+    const sent = [...byId.values()].sort((a, b) => Date.parse(b.sentAt) - Date.parse(a.sentAt)).slice(0, options.limit);
+    if (sent.length === 0) return sent;
+    const archivePath = folderByUse(boxes, "\\Archive", ARCHIVE_NAMES);
+    const candidates: ReplyCandidate[] = [];
+    for (const folder of ["INBOX", ...(archivePath ? [archivePath] : [])]) {
+      try {
+        candidates.push(...(await candidatesIn(client, folder, since)));
+      } catch (err) {
+        warn(`replies in ${folder} were not read: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return sent.map((s) => withReplies(s, candidates));
+  });
 }
