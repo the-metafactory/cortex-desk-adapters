@@ -13,6 +13,7 @@
     "desk-mail-draft": "bin/desk-mail-draft.ts",
     "desk-goal": "bin/desk-goal.ts",
     "desk-task": "bin/desk-task.ts",
+    "desk-task-close": "bin/desk-task-close.ts",
     "desk-parse": "bin/desk-parse.ts",
     "desk-note-tana": "bin/desk-note-tana.ts",
     "desk-classify-mail": "bin/desk-classify-mail.ts",

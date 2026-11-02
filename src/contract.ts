@@ -182,6 +182,19 @@ export interface DeskWriteResult {
   message?: string;
 }
 
+/**
+ * The task close contract (cortex#3110): Cortex writes one DeskTaskCloseRequest to the closer's stdin after the
+ * person approves or discards a hand-off. The answer is a DeskWriteResult, a refusal the last line of stderr.
+ */
+export interface DeskTaskCloseRequest {
+  action: "close";
+  /** The task a writer filed, e.g. jcfischer/desk#7. */
+  task: string;
+  outcome: "approved" | "discarded";
+  /** The Desk's receipt for the decision, e.g. ivy:<hand-off id>; the only detail the close leaves on the task. */
+  receipt: string;
+}
+
 /** The Desk parser contract: Cortex writes one DeskParseRequest to the parser's stdin. */
 export type DeskParseKind = DeskWriteKind | "conversation";
 
