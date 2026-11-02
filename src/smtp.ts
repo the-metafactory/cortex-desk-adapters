@@ -62,18 +62,20 @@ export async function smtpAccount(name: string, run: Runner, path = emailConfigP
 
 const quoted = (value: string): string => `"${value.replace(/[\\"]/g, "\\$&")}"`;
 
-/** The password mechanisms tried in turn. curl would otherwise pick NTLM or GSSAPI when a server (Exchange) offers them. */
-export const SMTP_MECHANISMS = ["LOGIN", "PLAIN"] as const;
+export type SmtpMechanism = "LOGIN" | "PLAIN" | "any";
+
+/** Tried in turn: curl's own choice ("any") picks NTLM or GSSAPI when a server (Exchange) offers them, so it comes last. */
+const SMTP_MECHANISMS: readonly SmtpMechanism[] = ["LOGIN", "PLAIN", "any"];
 const AUTH_FAILED = new Set([67, 94]);
 
 /** curl's config for one SMTP submission: implicit TLS for a secure account, else STARTTLS is required. */
-export function curlConfig(account: SmtpAccount, rcpt: string, mechanism: (typeof SMTP_MECHANISMS)[number] = "LOGIN"): string {
+export function curlConfig(account: SmtpAccount, rcpt: string, mechanism: SmtpMechanism = "LOGIN"): string {
   if (/[\r\n]/.test(account.user + account.pass + rcpt + account.from)) throw new Refusal("The SMTP settings hold a line break.");
   return [
     `url = ${quoted(`${account.secure ? "smtps" : "smtp"}://${account.host}:${account.port}`)}`,
     ...(account.secure ? [] : ["ssl-reqd"]),
     `user = ${quoted(`${account.user}:${account.pass}`)}`,
-    `login-options = ${quoted(`AUTH=${mechanism}`)}`,
+    ...(mechanism === "any" ? [] : [`login-options = ${quoted(`AUTH=${mechanism}`)}`]),
     `mail-from = ${quoted(account.from)}`,
     `mail-rcpt = ${quoted(rcpt)}`,
   ].join("\n");
