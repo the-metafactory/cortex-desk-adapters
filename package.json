@@ -23,6 +23,7 @@
     "desk-mail-dmarc": "bin/desk-mail-dmarc.ts",
     "desk-mail-report": "bin/desk-mail-report.ts",
     "desk-mail-invite": "bin/desk-mail-invite.ts",
+    "desk-mail-send": "bin/desk-mail-send.ts",
     "desk-exchange-decline": "bin/desk-exchange-decline.ts"
   },
   "scripts": {
