@@ -75,13 +75,14 @@ export function ownMailMessage(input: { account: SmtpAccount; rcpt: string; subj
 
 /**
  * Sends one mail to one of the principal's own addresses, by default the sending account's From address. The recipient
- * limit is enforced here, against the email config, so no routine, model or action input can widen it.
+ * limit is enforced here, against the email config, so no routine, model or action input can widen it. The address sent to
+ * is the config's own entry, never the request's spelling of it.
  */
 export async function sendOwnMail(req: MailSendRequest, deps: MailSendDeps): Promise<DeskWriteResult> {
   const account = await deps.smtp(req.account ?? (await deps.defaultAccount()));
-  const rcpt = req.to ?? account.from;
-  const own = await deps.ownAddresses();
-  if (!own.includes(rcpt.toLowerCase())) throw new Refusal("That recipient is not one of the principal's own configured addresses, so nothing was sent.");
+  const wanted = (req.to ?? account.from).toLowerCase();
+  const rcpt = (await deps.ownAddresses()).find((address) => address === wanted);
+  if (rcpt === undefined) throw new Refusal("That recipient is not one of the principal's own configured addresses, so nothing was sent.");
   const id = `${deps.newId()}@${account.from.split("@")[1] ?? "localhost"}`;
   await deps.send(account, rcpt, ownMailMessage({ account, rcpt, subject: req.subject, body: req.body, messageId: id, date: new Date(deps.now()) }));
   return { id, message: `The mail went to ${rcpt}.` };

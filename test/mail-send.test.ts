@@ -36,10 +36,30 @@ const headersOf = (message: string): string[] => message.slice(0, message.indexO
 const bodyOf = (message: string): string => Buffer.from(message.slice(message.indexOf("\r\n\r\n") + 4).replace(/\r\n/g, ""), "base64").toString("utf8");
 
 describe("a permitted recipient", () => {
-  it("sends once to the named own address, whichever case the request uses", async () => {
+  it("sends once to the config's own entry, whichever case the request uses", async () => {
     const { sends, result } = attempt({ to: "ME@work.example.net" });
-    expect(await result).toEqual({ id: "id1@example.org", message: "The mail went to ME@work.example.net." });
-    expect(sends.map((s) => s.rcpt)).toEqual(["ME@work.example.net"]);
+    expect(await result).toEqual({ id: "id1@example.org", message: `The mail went to ${OTHER_OWN}.` });
+    expect(sends.map((s) => s.rcpt)).toEqual([OTHER_OWN]);
+    expect(headersOf(sends[0]!.message)).toContain(`To: ${OTHER_OWN}`);
+  });
+
+  it("sends to the config's entry when a look-alike character lowercases onto it", async () => {
+    const { sends, result } = attempt({ to: "me@wor\u212A.example.net" });
+    await result;
+    expect(sends.map((s) => s.rcpt)).toEqual([OTHER_OWN]);
+    expect(sends[0]!.message).not.toContain("\u212A");
+  });
+
+  it("folds a long non-ASCII subject into encoded words within the RFC 2047 limit", async () => {
+    const subject = "Ü".repeat(150) + "😀".repeat(30);
+    const { sends, result } = attempt({ subject });
+    await result;
+    const message = sends[0]!.message;
+    const lines = message.slice(message.indexOf("Subject: ") + "Subject: ".length, message.indexOf("\r\nDate:")).split("\r\n ");
+    expect(lines.length).toBeGreaterThan(1);
+    for (const line of lines) expect(line.length).toBeLessThanOrEqual(75);
+    const bytes = lines.flatMap((line) => [...Buffer.from(line.slice("=?UTF-8?B?".length, -"?=".length), "base64")]);
+    expect(Buffer.from(bytes).toString("utf8")).toBe(subject);
   });
 
   it("sends to the account's own address when the request names no recipient", async () => {

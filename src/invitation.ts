@@ -239,8 +239,22 @@ export const base64Lines = (text: string): string => (Buffer.from(text, "utf8").
 
 const asciiOnly = (text: string): boolean => [...text].every((ch) => ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) < 127);
 
-/** An RFC 2047 encoded word when the text is not plain printable ASCII. */
-export const headerWord = (text: string): string => (asciiOnly(text) ? text : `=?UTF-8?B?${Buffer.from(text, "utf8").toString("base64")}?=`);
+/** 45 bytes are 60 base64 characters, which with the 12 of the =?UTF-8?B??= frame stay within RFC 2047's 75. */
+const ENCODED_WORD_BYTES = 45;
+
+function encodedWordChunks(text: string): string[] {
+  const chunks = [""];
+  for (const ch of text) {
+    const last = chunks[chunks.length - 1] ?? "";
+    if (Buffer.byteLength(last + ch, "utf8") > ENCODED_WORD_BYTES) chunks.push(ch);
+    else chunks[chunks.length - 1] = last + ch;
+  }
+  return chunks;
+}
+
+/** RFC 2047 encoded words, folded onto continuation lines, when the text is not plain printable ASCII. */
+export const headerWord = (text: string): string =>
+  asciiOnly(text) ? text : encodedWordChunks(text).map((chunk) => `=?UTF-8?B?${Buffer.from(chunk, "utf8").toString("base64")}?=`).join("\r\n ");
 
 /** A From header value: the address alone, or with the display name quoted or encoded. */
 export function senderHeader(from: string, fromName?: string): string {
