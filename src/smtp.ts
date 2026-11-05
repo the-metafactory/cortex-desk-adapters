@@ -58,11 +58,17 @@ export async function accountAddresses(name: string, path = emailConfigPath()): 
   return [...new Set([from, smtpUser, imapUser].flatMap((a) => (a && ADDRESS.test(a.trim()) ? [a.trim().toLowerCase()] : [])))];
 }
 
-/** The own addresses of every account in the email config, lowercased: the principal's addresses, and nothing a request can add to. */
+/**
+ * The From address of every account in the email config, lowercased: the addresses the principal configured as their own.
+ * A login name is left out, even one shaped like an address, because a relay or shared-mailbox login may belong to someone else.
+ */
 export async function ownAddresses(path = emailConfigPath()): Promise<string[]> {
   const { accounts } = await readConfig(path);
-  const perAccount = await Promise.all(Object.keys(accounts).map((name) => accountAddresses(name, path)));
-  return [...new Set(perAccount.flat())];
+  const froms = Object.values(accounts).flatMap((account) => {
+    const from = isRecord(account) && isRecord(account.from) ? str(account.from.email)?.trim() : undefined;
+    return from && ADDRESS.test(from) ? [from.toLowerCase()] : [];
+  });
+  return [...new Set(froms)];
 }
 
 /** Reads one account's SMTP settings and From address from the `email` CLI's config, resolving the password. */

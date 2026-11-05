@@ -193,8 +193,14 @@ exit 0
   };
   const curlRan = () => stat(logFile()).then(() => true, () => false);
 
-  it("reads every account's addresses, and no user name that is not an address", async () => {
-    expect((await ownAddresses(join(dir, ".config", "email", "config.json"))).sort()).toEqual([OWN, `imap-${OTHER_OWN}`, `imap-${OWN}`, OTHER_OWN].sort());
+  it("reads every account's From address, and no login name, even one shaped like an address", async () => {
+    expect((await ownAddresses(join(dir, ".config", "email", "config.json"))).sort()).toEqual([OWN, OTHER_OWN].sort());
+  });
+
+  it("refuses a login name that is shaped like an address, without starting curl", async () => {
+    const { code } = await runCommand([], JSON.stringify({ ...REQ, to: `imap-${OWN}` }));
+    expect(code).toBe(1);
+    expect(await curlRan()).toBe(false);
   });
 
   it("refuses when the config cannot be read", async () => {

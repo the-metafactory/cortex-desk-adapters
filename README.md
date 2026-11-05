@@ -241,7 +241,7 @@ A `removeOnDecline` entry `{ account, command }` removes the copy that the accou
 
 `desk-mail-send [--request-file <path>]` sends one text mail for the `A_MAIL_SEND` action in `pulse-actions`. It reads `{ "account"?, "to"?, "subject", "body" }` from the file or from stdin, and prints `{ "id", "message" }`. It submits the mail through the same SMTP path as invitation replies.
 
-It mails only the principal's own addresses: the From address and the SMTP and IMAP user names that are addresses, of every account in `~/.config/email/config.json`. With no `to`, the mail goes to the sending account's From address, and with no `account` it goes through the config's `defaultAccount`. It refuses, with nothing sent, any other recipient, a display name or a list, any cc or bcc, a field it does not know, and a line break in a subject or address. The body travels as base64, so it cannot add a header. The list comes from the config alone, so no request can widen it.
+It mails only the principal's own addresses: the From address of every account in `~/.config/email/config.json`. A login name does not count, even one shaped like an address. With no `to`, the mail goes to the sending account's From address, and with no `account` it goes through the config's `defaultAccount`. It refuses, with nothing sent, any other recipient, a display name or a list, any cc or bcc, a field it does not know, and a line break in a subject or address. The body travels as base64, so it cannot add a header. The list comes from the config alone, so no request can widen it.
 
 ### DMARC reports
 
