@@ -17,12 +17,12 @@ export interface SmtpAccount {
   fromName?: string;
 }
 
-const ADDRESS = /^[^\s<>,@"]+@[^\s<>,@"]+$/;
+export const ADDRESS = /^[^\s<>,@"]+@[^\s<>,@"]+$/;
 const HOST = /^[A-Za-z0-9.-]{1,253}$/;
 const emailConfigPath = (): string => join(homedir(), ".config", "email", "config.json");
 const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
-async function accountRecord(name: string, path: string): Promise<Record<string, unknown>> {
+async function readConfig(path: string): Promise<{ accounts: Record<string, unknown>; defaultAccount?: string }> {
   let config: unknown;
   try {
     config = JSON.parse(await readFile(path, "utf8"));
@@ -30,10 +30,23 @@ async function accountRecord(name: string, path: string): Promise<Record<string,
     throw new Refusal("The email config could not be read.");
   }
   const accounts = isRecord(config) && isRecord(config.accounts) ? config.accounts : {};
+  const defaultAccount = isRecord(config) ? str(config.defaultAccount) : undefined;
+  return { accounts, ...(defaultAccount ? { defaultAccount } : {}) };
+}
+
+async function accountRecord(name: string, path: string): Promise<Record<string, unknown>> {
+  const { accounts } = await readConfig(path);
   const key = Object.keys(accounts).find((k) => k.toLowerCase() === name.toLowerCase());
   const account = key === undefined ? undefined : accounts[key];
   if (!isRecord(account)) throw new Refusal(`There is no ${name} account in the email config.`);
   return account;
+}
+
+/** The email config's default account, which a command uses when a request names none. */
+export async function defaultAccountName(path = emailConfigPath()): Promise<string> {
+  const { defaultAccount } = await readConfig(path);
+  if (!defaultAccount) throw new Refusal("The email config names no default account.");
+  return defaultAccount;
 }
 
 /** The account's own addresses (its From address and its SMTP and IMAP user names that are addresses), lowercased. */
@@ -43,6 +56,13 @@ export async function accountAddresses(name: string, path = emailConfigPath()): 
   const smtpUser = isRecord(account.smtp) && isRecord(account.smtp.auth) ? str(account.smtp.auth.user) : undefined;
   const imapUser = isRecord(account.imap) && isRecord(account.imap.auth) ? str(account.imap.auth.user) : undefined;
   return [...new Set([from, smtpUser, imapUser].flatMap((a) => (a && ADDRESS.test(a.trim()) ? [a.trim().toLowerCase()] : [])))];
+}
+
+/** The own addresses of every account in the email config, lowercased: the principal's addresses, and nothing a request can add to. */
+export async function ownAddresses(path = emailConfigPath()): Promise<string[]> {
+  const { accounts } = await readConfig(path);
+  const perAccount = await Promise.all(Object.keys(accounts).map((name) => accountAddresses(name, path)));
+  return [...new Set(perAccount.flat())];
 }
 
 /** Reads one account's SMTP settings and From address from the `email` CLI's config, resolving the password. */

@@ -235,12 +235,18 @@ export function buildReply(ics: string, input: { attendee: string; reply: DeskIn
   return `${lines.map(foldLine).join("\r\n")}\r\n`;
 }
 
-const base64Lines = (text: string): string => (Buffer.from(text, "utf8").toString("base64").match(/.{1,76}/g) ?? []).join("\r\n");
+export const base64Lines = (text: string): string => (Buffer.from(text, "utf8").toString("base64").match(/.{1,76}/g) ?? []).join("\r\n");
 
 const asciiOnly = (text: string): boolean => [...text].every((ch) => ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) < 127);
 
 /** An RFC 2047 encoded word when the text is not plain printable ASCII. */
 export const headerWord = (text: string): string => (asciiOnly(text) ? text : `=?UTF-8?B?${Buffer.from(text, "utf8").toString("base64")}?=`);
+
+/** A From header value: the address alone, or with the display name quoted or encoded. */
+export function senderHeader(from: string, fromName?: string): string {
+  const name = fromName?.replace(/["\\]/g, "");
+  return name ? `${asciiOnly(name) ? `"${name}"` : headerWord(name)} <${from}>` : from;
+}
 
 export interface ReplyMessageInput {
   from: string;
@@ -264,10 +270,8 @@ const WORD: Record<DeskInviteReplyRequest["reply"], { subject: string; text: str
 export function replyMessage(input: ReplyMessageInput): string {
   const word = WORD[input.reply];
   const who = input.fromName ? `${input.fromName} (${input.from})` : input.from;
-  const name = input.fromName?.replace(/["\\]/g, "");
-  const sender = name ? `${asciiOnly(name) ? `"${name}"` : headerWord(name)} <${input.from}>` : input.from;
   return [
-    `From: ${sender}`,
+    `From: ${senderHeader(input.from, input.fromName)}`,
     `To: ${input.to}`,
     `Subject: ${headerWord(`${word.subject}: ${input.summary}`)}`,
     `Date: ${input.date.toUTCString().replace("GMT", "+0000")}`,
