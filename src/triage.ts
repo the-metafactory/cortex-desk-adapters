@@ -29,6 +29,7 @@ export interface TriageExample {
 
 export interface TriageMail {
   id: string;
+  sourceId?: string;
   from: { name?: string; address: string };
   subject: string;
   firstParagraph: string;
@@ -37,8 +38,10 @@ export interface TriageMail {
 }
 
 export interface TriageRequest {
+  sourcePolicy?: "cloud" | "local";
+  notes?: { id: string; name: string; text: string; areas?: string[]; sourcePolicy?: string }[];
   mail: TriageMail;
-  meetings: { key: string; title: string; start: string }[];
+  meetings: { key: string; title: string; start: string; sourceId?: string; sourcePolicy?: string }[];
   vips: string[];
   unimportant: string[];
   corrections: { kind: string; source: string; mode: string; label: string }[];
@@ -100,6 +103,7 @@ export function readTriageRequest(text: string): TriageRequest {
   const from = m.from as Record<string, unknown>;
   const mail: TriageMail = {
     id: str(m.id, "mail.id"),
+    ...(typeof m.sourceId === "string" ? { sourceId: m.sourceId } : {}),
     from: { address: str(from.address, "mail.from.address"), ...(typeof from.name === "string" ? { name: from.name } : {}) },
     subject: str(m.subject, "mail.subject"),
     firstParagraph: typeof m.firstParagraph === "string" ? m.firstParagraph : "",
@@ -108,7 +112,9 @@ export function readTriageRequest(text: string): TriageRequest {
   };
   return {
     mail,
-    meetings: records(body.meetings, "meetings").map((x, i) => ({ key: str(x.key, `meetings[${i}].key`), title: str(x.title, `meetings[${i}].title`), start: str(x.start, `meetings[${i}].start`) })),
+    ...(body.sourcePolicy === "cloud" || body.sourcePolicy === "local" ? { sourcePolicy: body.sourcePolicy } : {}),
+    notes: records(body.notes, "notes").slice(0, 30).map((x, i) => ({ id: str(x.id, `notes[${i}].id`), name: str(x.name, `notes[${i}].name`), areas: strings(x.areas, `notes[${i}].areas`), sourcePolicy: typeof x.sourcePolicy === "string" ? x.sourcePolicy : "", text: str(x.text, `notes[${i}].text`).slice(0, 600) })),
+    meetings: records(body.meetings, "meetings").map((x, i) => ({ key: str(x.key, `meetings[${i}].key`), title: str(x.title, `meetings[${i}].title`), start: str(x.start, `meetings[${i}].start`), sourceId: typeof x.sourceId === "string" ? x.sourceId : "", sourcePolicy: typeof x.sourcePolicy === "string" ? x.sourcePolicy : "" })),
     vips: strings(body.vips, "vips"),
     unimportant: strings(body.unimportant, "unimportant"),
     corrections: records(body.corrections, "corrections").slice(0, MAX_CORRECTIONS).map((x, i) => ({

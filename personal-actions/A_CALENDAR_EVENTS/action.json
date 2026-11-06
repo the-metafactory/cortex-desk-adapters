@@ -1,0 +1,27 @@
+{
+  "name": "A_CALENDAR_EVENTS",
+  "version": "1.0.0",
+  "description": "Search only supplied cloud-policy Desk calendar. No other stores are queried.",
+  "effect": "read",
+  "requires": [
+    "readFile"
+  ],
+  "input": {
+    "scopeFile": {
+      "type": "string",
+      "required": true
+    },
+    "query": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "output": {
+    "events": {
+      "type": "array"
+    },
+    "coverage": {
+      "type": "string"
+    }
+  }
+}

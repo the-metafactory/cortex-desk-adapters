@@ -1,0 +1,27 @@
+{
+  "name": "A_NOTES_SEARCH",
+  "version": "1.0.0",
+  "description": "Search only supplied cloud-policy Desk notes. No other stores are queried.",
+  "effect": "read",
+  "requires": [
+    "readFile"
+  ],
+  "input": {
+    "scopeFile": {
+      "type": "string",
+      "required": true
+    },
+    "query": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "output": {
+    "notes": {
+      "type": "array"
+    },
+    "coverage": {
+      "type": "string"
+    }
+  }
+}

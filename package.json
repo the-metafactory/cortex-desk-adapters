@@ -24,7 +24,8 @@
     "desk-mail-report": "bin/desk-mail-report.ts",
     "desk-mail-invite": "bin/desk-mail-invite.ts",
     "desk-mail-send": "bin/desk-mail-send.ts",
-    "desk-exchange-decline": "bin/desk-exchange-decline.ts"
+    "desk-exchange-decline": "bin/desk-exchange-decline.ts",
+    "desk-codex-json": "bin/desk-codex-json.ts"
   },
   "scripts": {
     "test": "bun test",
