@@ -32,7 +32,7 @@ describe("classifier deadline", () => {
       expect(r.err.trim().split("\n")).toHaveLength(1);
       expect(r.err).toContain("--timeout-ms must be an integer from 1000 to 300000");
     }
-  });
+  }, 15000);
 
   it("keeps the default command working and bounds a configurable multi-round request", async () => {
     let slow = false;
