@@ -68,6 +68,7 @@ describe("classifier deadline", () => {
       expect(JSON.parse(longer.out)).toMatchObject({ category: "reply", commitment: "none" });
       expect(longer.err).toContain("1 tool calls");
       slow = false;
+      sawToolError = false;
       missing = true;
       const unavailable = await command(url);
       expect(unavailable.code).toBe(0);
@@ -92,6 +93,6 @@ describe("classifier deadline", () => {
   it("changes only the research deadline in the Mini flow profile", async () => {
     const standard = await Bun.file(FLOW).text();
     const mini = await Bun.file(join(ROOT, "flows/desk-mail-triage-mini.yaml")).text();
-    expect(mini).toBe(standard.replace("timeout_ms: 60000", "timeout_ms: 110000"));
+    expect(mini).toBe(standard.replace("timeout_ms: 60000", "timeout_ms: 150000"));
   });
 });

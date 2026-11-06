@@ -306,7 +306,7 @@ mc:
         maxPerPass: 10
 ```
 
-For the Mini, use `flows/desk-mail-triage-mini.yaml` with `--timeout-ms 110000` and Cortex `timeoutSeconds: 120`. This profile changes only the research deadline to 110 seconds, leaving 3 seconds for command cleanup inside Cortex's 120-second limit. Tools, rounds, prompts and answer validation match the default flow. Historical search results can refer to mail deleted from the server; a longer deadline does not restore those messages.
+For the Mini, use `flows/desk-mail-triage-mini.yaml` with `--timeout-ms 150000` and Cortex `timeoutSeconds: 180`. This profile changes only the research deadline to 150 seconds, leaving 3 seconds for command cleanup inside Cortex's 180-second limit (requires a Cortex version that accepts this classifier budget). Tools, rounds, prompts and answer validation match the default flow. Historical search results can refer to mail deleted from the server; a longer deadline does not restore those messages.
 
 ## Develop
 
