@@ -4,7 +4,8 @@
  * triage flow (a Pulse research step on one OpenAI-compatible model) and prints one JSON answer.
  * Usage: desk-classify-mail --flow <yaml> --base-url <url up to /v1> --model <name> [--key-env DESK_CLASSIFIER_KEY]
  *        [--ca-file <pem>] [--actions-dir <dir>]... [--mail-accounts work,personal] [--state-dir <dir>]
- * Any failure exits non-zero with one line on stderr, within 65 s, so the Desk falls back to its rules.
+ *        [--timeout-ms <1000..300000>]
+ * Any failure exits non-zero with one line on stderr. The total deadline is the model budget plus 3 s.
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -13,15 +14,12 @@ import { classifyMail, withCa } from "../src/classify-mail";
 import { pulse } from "../src/pulse";
 import { readTriageRequest } from "../src/triage";
 
-const DEADLINE_MS = 63_000;
-const MODEL_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 function fail(message: string, code = 1): never {
   process.stderr.write(`desk-classify-mail: ${message.split("\n")[0] ?? message}\n`);
   process.exit(code);
 }
-
-const deadline = setTimeout(() => fail(`no answer within ${DEADLINE_MS / 1000} s`, 3), DEADLINE_MS);
 
 try {
   const { values } = parseArgs({
@@ -34,12 +32,20 @@ try {
       "actions-dir": { type: "string", multiple: true },
       "mail-accounts": { type: "string" },
       "state-dir": { type: "string" },
+      "timeout-ms": { type: "string" },
     },
   });
   const flow = values.flow;
   const baseUrl = values["base-url"];
   const model = values.model;
   if (!flow || !baseUrl || !model) fail("--flow, --base-url and --model are required", 2);
+  const rawTimeout = values["timeout-ms"];
+  const timeoutMs = rawTimeout === undefined ? DEFAULT_TIMEOUT_MS : Number(rawTimeout);
+  if ((rawTimeout !== undefined && !/^\d+$/.test(rawTimeout)) || !Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 300_000) {
+    fail("--timeout-ms must be an integer from 1000 to 300000", 2);
+  }
+  const deadlineMs = timeoutMs + 3000;
+  const deadline = setTimeout(() => fail(`no answer within ${deadlineMs / 1000} s`, 3), deadlineMs);
   if (values["mail-accounts"]) process.env.PULSE_MAIL_ACCOUNTS = values["mail-accounts"];
   const caFile = values["ca-file"];
   const ca = caFile ? await Bun.file(caFile).text().catch(() => fail(`the CA file could not be read: ${caFile}`, 2)) : null;
@@ -53,7 +59,7 @@ try {
       model,
       apiKeyEnv: values["key-env"],
       label: "triage",
-      timeoutMs: MODEL_TIMEOUT_MS,
+      timeoutMs,
       ...(ca ? { fetch: withCa(ca) } : {}),
     }),
     actionDirs: values["actions-dir"] ?? [join(homedir(), ".config", "metafactory", "arc", "actions")],

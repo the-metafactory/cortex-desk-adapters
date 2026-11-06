@@ -286,13 +286,13 @@ The command prints one answer: `{ "category": "action" | "reply" | "meeting" | "
 
 ```sh
 desk-classify-mail --flow <path>/flows/desk-mail-triage.yaml --base-url <url up to /v1> --model <name> \
-  [--key-env DESK_CLASSIFIER_KEY] [--ca-file <pem>] [--actions-dir <dir>]... [--mail-accounts work,personal] [--state-dir <dir>]
+  [--key-env DESK_CLASSIFIER_KEY] [--ca-file <pem>] [--actions-dir <dir>]... [--mail-accounts work,personal] [--state-dir <dir>] [--timeout-ms <1000..300000>]
 ```
 
 - The key comes from the env var `--key-env` names, never from argv. `--ca-file` trusts a private CA for the gateway.
 - The read actions are looked up in `--actions-dir`, by default `~/.config/metafactory/arc/actions`, where arc installs pulse-actions. Their backends and env vars (`PULSE_MAIL_CLI`, `PULSE_CALENDAR_CLI`, `PULSE_NOTES_CLI`, `PULSE_CALENDAR_SOURCES`) are documented there. Mail tools refuse every account until `PULSE_MAIL_ACCOUNTS` is set; `--mail-accounts` sets it.
 - Research transcripts go to `<state-dir>/desk-classify-mail/transcripts` (0700; default state dir `$XDG_STATE_HOME/cortex-desk-adapters`, else `~/.local/state/cortex-desk-adapters`), never to stdout. On success, one stderr line reports the category, time, tool rounds and tool calls.
-- An unreachable gateway, a research step that times out, or an invalid answer exits non-zero with one stderr line, within 65 s.
+- An unreachable gateway, a research step that times out, or an invalid answer exits non-zero with one stderr line. The default model timeout is 60 seconds and the command deadline is 63 seconds. `--timeout-ms` accepts an integer from 1000 to 300000; the command deadline is that budget plus 3000 ms. The flow also has its own total research deadline.
 
 ```yaml
 mc:
@@ -305,6 +305,8 @@ mc:
         timeoutSeconds: 75
         maxPerPass: 10
 ```
+
+For the Mini, use `flows/desk-mail-triage-mini.yaml` with `--timeout-ms 150000` and Cortex `timeoutSeconds: 180`. This profile changes only the research deadline to 150 seconds. The CLI ends within 153 seconds, with 3 seconds beyond the research ceiling; Cortex allows another 27 seconds. This requires a Cortex version that accepts a 180-second classifier timeout. Tools, rounds, prompts and answer validation match the default flow. Start with `maxPerPass: 1` while qualifying a shared local model, and check other model clients before increasing the batch. Historical search results can contain stale UID/mailbox references after mail moves or deletion; a longer deadline does not repair that index.
 
 ## Develop
 
