@@ -1,8 +1,8 @@
 export const HTML_MAX = 2_000_000;
 
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
-const PLAIN_ELEMENTS = "h[1-6]|p|strong|em|del|code|pre|blockquote|ul|ol|li|table|thead|tbody|tr|th|td|a";
-const TAG = new RegExp(`<(?:/(?:${PLAIN_ELEMENTS})|(?:h[1-6]|p|strong|em|del|code|pre|blockquote|ul|ol|li|table|thead|tbody|tr|th|td|br|hr)|ol start="\\d{1,9}"|t[hd] align="(?:left|center|right)"|a href="([^"<>]*)")>`, "y");
+const CONTAINERS = "h[1-6]|p|strong|em|del|code|pre|blockquote|ul|ol|li|table|thead|tbody|tr|th|td";
+const TAG = new RegExp(`<(?:/(?:${CONTAINERS}|a)|(?:${CONTAINERS}|br|hr)|ol start="\\d{1,9}"|t[hd] align="(?:left|center|right)"|a href="([^"<>]*)")>`, "y");
 
 function isWebLink(attribute: string): boolean {
   if (/&(?!amp;)/.test(attribute)) return false;
@@ -15,7 +15,8 @@ function isWebLink(attribute: string): boolean {
  * True only for HTML built from a closed set of formatting elements, whose only attributes are an http or https `href` and
  * table alignment. The field may come from any earlier step of a routine, a model's included, so this refuses by default:
  * any other `<` fails, which covers scripts, images, styles, frames, forms, comments and event handlers. It does not parse
- * HTML; it holds the text to the shape a formatter that escapes its text emits.
+ * HTML; it holds the text to the shape a formatter that escapes its text emits. Inert means no active or remote content: it
+ * does not compare the html to the text part or judge where an http link leads.
  */
 export function mailHtmlIsInert(html: string): boolean {
   if (CONTROL.test(html)) return false;

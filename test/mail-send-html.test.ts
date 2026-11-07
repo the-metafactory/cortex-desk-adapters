@@ -134,6 +134,10 @@ describe("an html field the send side does not trust", () => {
     ["a table with alignment", '<table><thead><tr><th align="left">a</th></tr></thead><tbody><tr><td align="right">b</td></tr></tbody></table>'],
     ["an escaped script as text", "<p>&lt;script&gt;alert(1)&lt;/script&gt; a &gt; b</p>"],
     ["an http link", '<a href="http://example.org/a">x</a>'],
+    [
+      "output captured from A_FORMAT_MARKDOWN",
+      "<p>50 Artikel vom 2026-11-06 (Europe/Zurich).<br>Hinweis.</p>\n<h3>Sicherheit</h3>\n<ul>\n<li><strong>Patchday:</strong> A &amp; B &lt;script&gt;x&lt;/script&gt; &quot;d&quot; &#39;e&#39; <a href=\"https://example.org/a%27b?x=1&amp;y=2\">Quelle</a></li>\n</ul>\n<ol>\n<li>eins</li>\n</ol>\n<blockquote>\n<p>Zitat</p>\n</blockquote>\n<hr>\n<p><code>code</code> <del>alt</del> <em>neu</em></p>\n<pre><code>&lt;y&gt;</code></pre>\n<table>\n<thead>\n<tr>\n<th align=\"left\">a</th>\n</tr>\n</thead>\n<tbody><tr>\n<td align=\"left\">b</td>\n</tr>\n</tbody></table>\n<ol start=\"3\">\n<li>drei</li>\n</ol>\n",
+    ],
   ];
   for (const [name, html] of accepted) {
     it(`accepts ${name}`, async () => {
