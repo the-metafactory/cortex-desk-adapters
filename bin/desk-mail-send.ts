@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 /**
- * desk-mail-send: sends one text mail to one of the principal's own addresses through the account's SMTP server. Reads
- * `{ "account"?, "to"?, "subject", "body" }` from `--request-file` or stdin, and prints `{ "id", "message" }`. With no
+ * desk-mail-send: sends one mail to one of the principal's own addresses through the account's SMTP server. Reads
+ * `{ "account"?, "to"?, "subject", "body", "html"? }` from `--request-file` or stdin, and prints `{ "id", "message" }`. With no
  * `to`, the mail goes to the account's From address. A recipient outside the email config's own addresses, any cc or bcc,
- * and any line break in a subject or address is refused with no send. Uses the `email` CLI's account config; needs curl.
+ * any line break in a subject or address, and an html value holding more than plain formatting and http links are refused
+ * with no send. With `html`, the mail is multipart/alternative; without it, one text part. Uses the `email` CLI's account config; needs curl.
  * Usage: desk-mail-send [--request-file <path>]
  */
 import { readFile } from "node:fs/promises";

@@ -239,7 +239,9 @@ A `removeOnDecline` entry `{ account, command }` removes the copy that the accou
 
 ### Mail from a routine
 
-`desk-mail-send [--request-file <path>]` sends one text mail for the `A_MAIL_SEND` action in `pulse-actions`. It reads `{ "account"?, "to"?, "subject", "body" }` from the file or from stdin, and prints `{ "id", "message" }`. It submits the mail through the same SMTP path as invitation replies.
+`desk-mail-send [--request-file <path>]` sends one mail for the `A_MAIL_SEND` action in `pulse-actions`. It reads `{ "account"?, "to"?, "subject", "body", "html"? }` from the file or from stdin, and prints `{ "id", "message" }`. It submits the mail through the same SMTP path as invitation replies.
+
+With `html`, the mail is `multipart/alternative`: `body` as the text part and `html` as the part mail clients show, each base64. Without it, the mail is one text part. The command does not render anything. It refuses, with no send, any `html` built from more than plain formatting elements and http or https links, because that field can come from any earlier step of a routine: scripts, images, styles, forms, comments, event handlers and other link schemes never leave this machine.
 
 It mails only the principal's own addresses: the From address of every account in `~/.config/email/config.json`. A login name does not count, even one shaped like an address. With no `to`, the mail goes to the sending account's From address, and with no `account` it goes through the config's `defaultAccount`. It refuses, with nothing sent, any other recipient, a display name or a list, any cc or bcc, a field it does not know, and a line break in a subject or address. The body travels as base64, so it cannot add a header. The list comes from the config alone, so no request can widen it.
 
