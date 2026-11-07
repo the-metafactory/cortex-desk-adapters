@@ -130,7 +130,7 @@ describe("an html field the send side does not trust", () => {
   }
 
   const accepted: [string, string][] = [
-    ["every element the formatter emits", '<h1>a</h1><h6>b</h6><p>c<br>d</p><hr><em>e</em><del>f</del><code>g</code><pre><code>h</code></pre><blockquote><p>i</p></blockquote><ol start="3"><li>j</li></ol>'],
+    ["the formatting elements",'<h1>a</h1><h6>b</h6><p>c<br>d</p><hr><em>e</em><del>f</del><code>g</code><pre><code>h</code></pre><blockquote><p>i</p></blockquote><ol start="3"><li>j</li></ol>'],
     ["a table with alignment", '<table><thead><tr><th align="left">a</th></tr></thead><tbody><tr><td align="right">b</td></tr></tbody></table>'],
     ["an escaped script as text", "<p>&lt;script&gt;alert(1)&lt;/script&gt; a &gt; b</p>"],
     ["an http link", '<a href="http://example.org/a">x</a>'],
