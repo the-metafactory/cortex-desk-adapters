@@ -227,6 +227,15 @@ exit 0
     expect(await curlRan()).toBe(false);
   });
 
+  it("submits a mail with clean html, and refuses html holding a script without starting curl", async () => {
+    const { code } = await runCommand([], JSON.stringify({ ...REQ, html: "<script>alert(1)</script>" }));
+    expect(code).toBe(1);
+    expect(await curlRan()).toBe(false);
+    const clean = await runCommand([], JSON.stringify({ ...REQ, html: "<p><strong>Three</strong> articles.</p>" }));
+    expect(clean.code).toBe(0);
+    expect(await curlRan()).toBe(true);
+  });
+
   it("refuses a bcc without starting curl", async () => {
     const { code } = await runCommand([], JSON.stringify({ ...REQ, bcc: STRANGER }));
     expect(code).toBe(1);
