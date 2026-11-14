@@ -19,6 +19,12 @@ export interface DeskSourceEvent {
   url?: string;
   /** The calendar the event belongs to, e.g. for per-calendar colours. */
   calendar?: string;
+  /**
+   * The meeting's organizer and attendees (cortex#3628), which the `mail.link-meeting` auto-link checks a sender against.
+   * Addresses only, lowercase, at most 500 attendees. Left out when the source has no address.
+   */
+  organizer?: { address: string };
+  attendees?: { address: string }[];
 }
 
 export interface DeskSourceMail {
