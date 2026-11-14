@@ -1,4 +1,5 @@
 import type { DeskMailLink } from "./contract";
+import { decode } from "./entities";
 import { HOST_LABELS } from "./host";
 
 const MAX_LINKS = 20;
@@ -10,18 +11,6 @@ const MAX_HREF = 2000;
 const CLOSE = /<\/a\s*>/i;
 const HREF = /(?:^|\s)href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
 const URL_LIKE = new RegExp(`^(?:https?://)?${HOST_LABELS}\\.?(?::\\d{1,5})?(?:[/?#]\\S*)?$`, "i");
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
-
-const codePoint = (n: number): string => (Number.isInteger(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : " ");
-
-function decode(text: string): string {
-  return text.replace(/&(#x[0-9a-f]{1,8}|#\d{1,10}|[a-z]{2,8});/gi, (whole, name: string) => {
-    if (/^#x/i.test(name)) return codePoint(Number.parseInt(name.slice(2), 16));
-    if (name.startsWith("#")) return codePoint(Number.parseInt(name.slice(1), 10));
-    return ENTITIES[name.toLowerCase()] ?? whole;
-  });
-}
-
 const visible = (html: string): string => decode(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
 
 interface Anchor {
