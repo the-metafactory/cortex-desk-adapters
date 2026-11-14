@@ -78,8 +78,12 @@ export async function readFirstParagraph(run: (args: string[]) => Promise<string
  * unread ones beyond them. A read message can still wait in the inbox, and its card needs the paragraph too.
  */
 export function bodyTargets(listed: EmailListEntry[], count: number): EmailListEntry[] {
-  const unread = listed.filter((m) => !m.flags.includes("\\Seen")).slice(0, count);
-  return [...new Set([...listed.slice(0, count), ...unread])];
+  return [...new Set([...listed.slice(0, count), ...unreadTargets(listed, count)])];
+}
+
+/** The newest `count` unread listed messages: the ones whose links are read. */
+export function unreadTargets(listed: EmailListEntry[], count: number): EmailListEntry[] {
+  return listed.filter((m) => !m.flags.includes("\\Seen")).slice(0, count);
 }
 
 export function toDeskMail(entry: EmailListEntry, account: string, paragraph: string | undefined): DeskSourceMail {

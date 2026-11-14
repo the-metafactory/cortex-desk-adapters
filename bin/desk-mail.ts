@@ -15,7 +15,7 @@
  * --invite-limit mails (default 10, at most 50) with an open invitation are added. No other older mail is listed.
  */
 import { parseArgs } from "node:util";
-import { bodyTargets, toDeskMail, readFirstParagraph, type EmailListEntry } from "../src/mail";
+import { bodyTargets, unreadTargets, toDeskMail, readFirstParagraph, type EmailListEntry } from "../src/mail";
 import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceOutput, DeskSourceSentMail } from "../src/contract";
 import { errorText, readHeaders, readInvitations, readLinks, readLookback, readSent } from "../src/imap";
 import { accountAddresses } from "../src/smtp";
@@ -64,7 +64,7 @@ async function run(args: string[]): Promise<string> {
 const items: (DeskSourceMail | DeskSourceSentMail)[] = [];
 for (const account of values.account ?? []) {
   const listed = JSON.parse(await run(["list", "-a", account, "-s", values.days ?? "3", "-l", values.limit ?? "40", "-o", "json"])) as EmailListEntry[];
-  const unread = listed.filter((m) => !m.flags.includes("\\Seen")).slice(0, Number(values.bodies));
+  const unread = unreadTargets(listed, Number(values.bodies));
   const paragraphs = new Map<number, string | undefined>();
   for (const m of bodyTargets(listed, Number(values.bodies))) {
     try {
