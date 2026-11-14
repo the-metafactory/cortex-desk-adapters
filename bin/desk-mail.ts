@@ -2,7 +2,8 @@
 /**
  * desk-mail: recent mail from the `email` CLI as Desk items.
  * Usage: desk-mail --account work --account personal [--days 3] [--limit 40] [--bodies 15] [--authserv mx.example.org]...
- * Bodies are fetched read-only (no --mark-read) for the newest unread messages only. Headers (List-Id, List-Unsubscribe,
+ * Bodies are fetched read-only (no --mark-read) for the newest unread messages only; a message with no plain-text body
+ * is read again with --html and its first paragraph taken from the HTML's visible text. Headers (List-Id, List-Unsubscribe,
  * Authentication-Results, Reply-To, In-Reply-To) are read over IMAP with BODY.PEEK; without them the mail is listed as before.
  * For the same unread messages, the links of the HTML body whose text names a host are read with BODY.PEEK too.
  * With --sent, the account's sent mail of the last --sent-days days (default 14, newest --sent-limit, default 40) is
@@ -14,7 +15,7 @@
  * --invite-limit mails (default 10, at most 50) with an open invitation are added. No other older mail is listed.
  */
 import { parseArgs } from "node:util";
-import { toDeskMail, firstParagraph, type EmailListEntry } from "../src/mail";
+import { toDeskMail, readFirstParagraph, type EmailListEntry } from "../src/mail";
 import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceOutput, DeskSourceSentMail } from "../src/contract";
 import { errorText, readHeaders, readInvitations, readLinks, readLookback, readSent } from "../src/imap";
 import { accountAddresses } from "../src/smtp";
@@ -67,7 +68,7 @@ for (const account of values.account ?? []) {
   const paragraphs = new Map<number, string | undefined>();
   for (const m of unread) {
     try {
-      paragraphs.set(m.uid, firstParagraph(await run(["get", "-a", account, "-u", String(m.uid)])));
+      paragraphs.set(m.uid, await readFirstParagraph(run, account, m.uid));
     } catch {
       paragraphs.set(m.uid, m.snippet);
     }

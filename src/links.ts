@@ -14,7 +14,7 @@ const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"'
 
 const codePoint = (n: number): string => (Number.isInteger(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : " ");
 
-function decode(text: string): string {
+export function decode(text: string): string {
   return text.replace(/&(#x[0-9a-f]{1,8}|#\d{1,10}|[a-z]{2,8});/gi, (whole, name: string) => {
     if (/^#x/i.test(name)) return codePoint(Number.parseInt(name.slice(2), 16));
     if (name.startsWith("#")) return codePoint(Number.parseInt(name.slice(1), 10));
