@@ -119,3 +119,20 @@ it("reads the newest count, plus older unread mail up to count", () => {
   const listed = [listEntry(4, true), listEntry(3, true), listEntry(2, false), listEntry(1, true)];
   expect(bodyTargets(listed, 2).map((m) => m.uid)).toEqual([4, 3, 2]);
 });
+
+it("skips an HTML heading that only repeats the subject", async () => {
+  const subject = "InVisible GmbH – Ihre Rechnung für automatische Verlängerungen";
+  const html = `<html><body><h1>InVisible GmbH –  Ihre Rechnung für automatische Verlängerungen</h1>
+    <p>Vielen Dank für Ihre Bestellung. Im Anhang finden Sie Ihre Rechnung.</p></body></html>`;
+  expect(await readFirstParagraph(fakeEmail("(no body)", html).run, "personal", 7, subject)).toBe("Vielen Dank für Ihre Bestellung. Im Anhang finden Sie Ihre Rechnung.");
+});
+
+it("skips a plain-text first line that repeats the subject, and keeps it without a subject", () => {
+  const out = getOutput("Invoice\n\nYour invoice for November is attached.");
+  expect(firstParagraph(out, "Invoice")).toBe("Your invoice for November is attached.");
+  expect(firstParagraph(out)).toBe("Invoice");
+});
+
+it("keeps a paragraph that only starts with the subject", () => {
+  expect(firstParagraph(getOutput("Invoice 42 is overdue since Monday."), "Invoice")).toBe("Invoice 42 is overdue since Monday.");
+});

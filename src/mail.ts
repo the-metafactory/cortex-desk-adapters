@@ -41,36 +41,39 @@ export function hasNoTextBody(getOutput: string): boolean {
   return bodyOf(getOutput) === NO_BODY;
 }
 
-function paragraphOf(body: string): string | undefined {
+const oneLine = (text: string): string => text.replace(/\s+/g, " ").trim().toLowerCase();
+
+function paragraphOf(body: string, subject?: string): string | undefined {
   if (body.trim() === NO_BODY) return undefined;
   const paragraphs = body.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
-  const first = paragraphs.find((p) => !(p.length <= 60 && GREETING.test(p)));
+  const heading = subject === undefined ? undefined : oneLine(subject);
+  const first = paragraphs.find((p) => !(p.length <= 60 && GREETING.test(p)) && oneLine(p) !== heading);
   if (!first) return undefined;
   return first.length > 400 ? `${first.slice(0, 397).trimEnd()}…` : first;
 }
 
 /**
- * The first paragraph a person would read: the body of `email get`, split on blank lines,
- * skipping a short greeting line, collapsed to one line and capped at 400 characters.
+ * The first paragraph a person would read: the body of `email get`, split on blank lines, skipping a short greeting
+ * line and a heading that only repeats the subject, collapsed to one line and capped at 400 characters.
  * The CLI's `(no body)` placeholder is no paragraph.
  */
-export function firstParagraph(getOutput: string): string | undefined {
-  return paragraphOf(bodyOf(getOutput));
+export function firstParagraph(getOutput: string, subject?: string): string | undefined {
+  return paragraphOf(bodyOf(getOutput), subject);
 }
 
 /** The same paragraph from `email get --html` output, read from the HTML body's visible text. */
-export function firstParagraphOfHtml(getHtmlOutput: string): string | undefined {
-  return paragraphOf(htmlText(bodyOf(getHtmlOutput)));
+export function firstParagraphOfHtml(getHtmlOutput: string, subject?: string): string | undefined {
+  return paragraphOf(htmlText(bodyOf(getHtmlOutput)), subject);
 }
 
 /**
  * The first paragraph of one message, read without marking it read (never `--mark-read`): the plain-text body, and
  * only when the CLI has none, the HTML body. `run` takes the `email` CLI's arguments and returns what it prints.
  */
-export async function readFirstParagraph(run: (args: string[]) => Promise<string>, account: string, uid: number): Promise<string | undefined> {
+export async function readFirstParagraph(run: (args: string[]) => Promise<string>, account: string, uid: number, subject?: string): Promise<string | undefined> {
   const text = await run(["get", "-a", account, "-u", String(uid)]);
-  if (!hasNoTextBody(text)) return firstParagraph(text);
-  return firstParagraphOfHtml(await run(["get", "--html", "-a", account, "-u", String(uid)]));
+  if (!hasNoTextBody(text)) return firstParagraph(text, subject);
+  return firstParagraphOfHtml(await run(["get", "--html", "-a", account, "-u", String(uid)]), subject);
 }
 
 /**

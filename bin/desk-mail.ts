@@ -68,7 +68,7 @@ for (const account of values.account ?? []) {
   const paragraphs = new Map<number, string | undefined>();
   for (const m of bodyTargets(listed, Number(values.bodies))) {
     try {
-      paragraphs.set(m.uid, await readFirstParagraph(run, account, m.uid));
+      paragraphs.set(m.uid, await readFirstParagraph(run, account, m.uid, m.subject));
     } catch {
       paragraphs.set(m.uid, m.snippet);
     }
