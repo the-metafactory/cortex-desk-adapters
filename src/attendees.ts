@@ -13,8 +13,9 @@ export function mailAddress(value: string | null | undefined): string | null {
 
 /**
  * The `organizer` and `attendees` fields of a Desk event, addresses only. A field is left out when the source gives no readable
- * address for it, because Cortex reads an empty or unreadable list as "nobody may link mail to this meeting". This fails open:
- * a meeting whose people are all names or Exchange legacy DNs carries neither field, so Cortex checks no sender for it, as before.
+ * address for it. Cortex reads an empty attendee list as no list; only an unreadable organizer or a nonempty list without a readable
+ * entry makes it refuse every sender, and sending that would mean sending names. This fails open: a meeting whose people are all
+ * names or Exchange legacy DNs carries neither field, so Cortex checks no sender for it, as before.
  */
 export function eventPeople(organizer: string | null | undefined, attendees: readonly (string | null | undefined)[]): Pick<DeskSourceEvent, "organizer" | "attendees"> {
   const lead = mailAddress(organizer);

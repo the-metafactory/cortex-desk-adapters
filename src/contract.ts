@@ -21,7 +21,7 @@ export interface DeskSourceEvent {
   calendar?: string;
   /**
    * The meeting's organizer and attendees (cortex#3628), which the `mail.link-meeting` auto-link checks a sender against.
-   * Addresses only, lowercase, at most 500 attendees. Left out when the source has no address: an empty list means nobody.
+   * Addresses only, lowercase, at most 500 attendees. Left out when the source has no address.
    */
   organizer?: { address: string };
   attendees?: { address: string }[];
