@@ -60,6 +60,30 @@ describe("desk-ics", () => {
     expect(parseIcs(text, window("2026-11-02T00:00:00Z", 1)).events.map((e) => e.title)).toEqual(["Current"]);
   });
 
+  it("sends ORGANIZER and ATTENDEE mailto addresses only, in lowercase, on every occurrence", () => {
+    const text = cal([
+      "UID:m", "DTSTART:20261102T100000Z", "RRULE:FREQ=DAILY;COUNT=2", "SUMMARY:Venue walkthrough",
+      "ORGANIZER;CN=\"Hopper, Grace\":MAILTO:Grace@Example.org",
+      "ATTENDEE;CN=Ada;PARTSTAT=ACCEPTED;ROLE=REQ-PARTICIPANT:mailto:Ada@Example.org",
+      "ATTENDEE;CN=Room 1;CUTYPE=ROOM:urn:uuid:5f1c",
+      "ATTENDEE;CN=Phone:sip:bob@example.org",
+      "ATTENDEE:mailto:not an address",
+    ]);
+    const events = parseIcs(text, window("2026-11-02T00:00:00Z", 2)).events;
+    expect(events.map((e) => [e.organizer, e.attendees])).toEqual([
+      [{ address: "grace@example.org" }, [{ address: "ada@example.org" }]],
+      [{ address: "grace@example.org" }, [{ address: "ada@example.org" }]],
+    ]);
+  });
+
+  it("leaves out organizer and attendees when the event names nobody by mail address", () => {
+    const text = cal(["UID:n", "DTSTART:20261102T100000Z", "SUMMARY:Focus", "ORGANIZER;CN=Grace:urn:uuid:1", "ATTENDEE;CN=Room:urn:uuid:2"], ["UID:o", "DTSTART:20261102T110000Z", "SUMMARY:Alone"]);
+    for (const e of parseIcs(text, window("2026-11-02T00:00:00Z", 1)).events) {
+      expect(e).not.toHaveProperty("organizer");
+      expect(e).not.toHaveProperty("attendees");
+    }
+  });
+
   it("handles COUNT series whose current occurrence is past the first thousand", () => {
     const text = cal(["UID:long", "DTSTART:20200101T090000Z", "RRULE:FREQ=DAILY;COUNT=5000", "SUMMARY:Long"]);
     expect(parseIcs(text, window("2026-11-02T00:00:00Z", 1)).events).toHaveLength(1);

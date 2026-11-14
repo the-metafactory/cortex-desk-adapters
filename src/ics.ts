@@ -1,3 +1,4 @@
+import { eventPeople } from "./attendees";
 import type { DeskSourceEvent } from "./contract";
 
 const DAY_MS = 86_400_000;
@@ -240,6 +241,8 @@ function buildEvents(props: IcsProperty[], window: IcsWindow): DeskSourceEvent[]
   const uid = get("UID")?.value.trim() || `${title}@${start.wall.y}-${start.wall.mo}-${start.wall.d}`;
   const location = get("LOCATION") ? unescapeText(get("LOCATION")?.value ?? "").trim() : "";
   const url = get("URL")?.value.trim() ?? "";
+  const mailto = (p: IcsProperty | undefined): string | null => /^\s*mailto:(.*)$/i.exec(p?.value ?? "")?.[1] ?? null;
+  const people = eventPeople(mailto(get("ORGANIZER")), props.filter((p) => p.name === "ATTENDEE").map(mailto));
   const transparency = props.filter(property => property.name === "TRANSP");
   const raw = transparency.length > 1 ? "INVALID" : transparency[0]?.value.trim().toUpperCase() ?? "UNKNOWN";
   const status = get("STATUS")?.value.trim().toUpperCase();
@@ -261,5 +264,6 @@ function buildEvents(props: IcsProperty[], window: IcsWindow): DeskSourceEvent[]
       title,
       ...(location ? { location } : {}),
       ...(SAFE_URL.test(url) ? { url } : {}),
+      ...people,
     }));
 }

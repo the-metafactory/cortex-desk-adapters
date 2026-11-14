@@ -1,3 +1,4 @@
+import { eventPeople } from "./attendees";
 import type { DeskSourceEvent } from "./contract";
 
 /** One event from `ical exchange list --compact --format json`. */
@@ -9,6 +10,10 @@ export interface ExchangeEvent {
   title: string;
   location?: string | null;
   meetingLink?: string | null;
+  /** The organizer's address, or null. */
+  organizer?: string | null;
+  /** Required and optional attendees. `email` falls back to the attendee's name when EWS has no address. */
+  attendees?: { email?: string | null }[] | null;
 }
 
 /** One event from `ical read --format json` (macOS Calendar). */
@@ -41,6 +46,7 @@ export function fromExchange(e: ExchangeEvent): DeskSourceEvent {
     ...(e.location ? { location: e.location } : {}),
     ...(isOnline(e.location, e.meetingLink) ? { online: true } : {}),
     ...(e.meetingLink ? { url: e.meetingLink } : {}),
+    ...eventPeople(e.organizer, (Array.isArray(e.attendees) ? e.attendees : []).map((a) => a?.email)),
   };
 }
 
