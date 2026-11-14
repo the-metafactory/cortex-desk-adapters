@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { appleMailUrl, firstParagraph, firstParagraphOfHtml, parseFrom, readFirstParagraph, toDeskMail } from "../src/mail";
+import { appleMailUrl, bodyTargets, firstParagraph, firstParagraphOfHtml, parseFrom, readFirstParagraph, toDeskMail, type EmailListEntry } from "../src/mail";
 import { htmlText } from "../src/html-text";
 
 it("parses a display name and address, lower-casing the address", () => {
@@ -106,4 +106,16 @@ it("scans hostile HTML in linear time", () => {
     htmlText(html);
     expect(performance.now() - started).toBeLessThan(1000);
   }
+});
+
+const listEntry = (uid: number, seen: boolean): EmailListEntry => ({ uid, messageId: `<${uid}@x>`, from: "a@x", subject: "s", date: "2026-11-14T10:00:00Z", flags: seen ? ["\\Seen"] : [] });
+
+it("reads the body of a read mail still in the inbox", () => {
+  const listed = [listEntry(3, true), listEntry(2, false), listEntry(1, true)];
+  expect(bodyTargets(listed, 15).map((m) => m.uid)).toEqual([3, 2, 1]);
+});
+
+it("reads the newest count, plus older unread mail up to count", () => {
+  const listed = [listEntry(4, true), listEntry(3, true), listEntry(2, false), listEntry(1, true)];
+  expect(bodyTargets(listed, 2).map((m) => m.uid)).toEqual([4, 3, 2]);
 });

@@ -2,10 +2,10 @@
 /**
  * desk-mail: recent mail from the `email` CLI as Desk items.
  * Usage: desk-mail --account work --account personal [--days 3] [--limit 40] [--bodies 15] [--authserv mx.example.org]...
- * Bodies are fetched read-only (no --mark-read) for the newest unread messages only; a message with no plain-text body
+ * Bodies are fetched read-only (no --mark-read) for the newest --bodies listed messages, read or unread, and the newest --bodies unread ones; a message with no plain-text body
  * is read again with --html and its first paragraph taken from the HTML's visible text. Headers (List-Id, List-Unsubscribe,
  * Authentication-Results, Reply-To, In-Reply-To) are read over IMAP with BODY.PEEK; without them the mail is listed as before.
- * For the same unread messages, the links of the HTML body whose text names a host are read with BODY.PEEK too.
+ * For the newest --bodies unread messages, the links of the HTML body whose text names a host are read with BODY.PEEK too.
  * With --sent, the account's sent mail of the last --sent-days days (default 14, newest --sent-limit, default 40) is
  * listed too, as `sent` items with the replies found in INBOX and the archive, read-only.
  * For every listed message, read or unread, a text/calendar part that holds a meeting request becomes the item's
@@ -15,7 +15,7 @@
  * --invite-limit mails (default 10, at most 50) with an open invitation are added. No other older mail is listed.
  */
 import { parseArgs } from "node:util";
-import { toDeskMail, readFirstParagraph, type EmailListEntry } from "../src/mail";
+import { bodyTargets, toDeskMail, readFirstParagraph, type EmailListEntry } from "../src/mail";
 import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceOutput, DeskSourceSentMail } from "../src/contract";
 import { errorText, readHeaders, readInvitations, readLinks, readLookback, readSent } from "../src/imap";
 import { accountAddresses } from "../src/smtp";
@@ -66,7 +66,7 @@ for (const account of values.account ?? []) {
   const listed = JSON.parse(await run(["list", "-a", account, "-s", values.days ?? "3", "-l", values.limit ?? "40", "-o", "json"])) as EmailListEntry[];
   const unread = listed.filter((m) => !m.flags.includes("\\Seen")).slice(0, Number(values.bodies));
   const paragraphs = new Map<number, string | undefined>();
-  for (const m of unread) {
+  for (const m of bodyTargets(listed, Number(values.bodies))) {
     try {
       paragraphs.set(m.uid, await readFirstParagraph(run, account, m.uid));
     } catch {
