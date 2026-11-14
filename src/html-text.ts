@@ -1,4 +1,4 @@
-import { decode } from "./links";
+import { decode } from "./entities";
 
 /** At most this much HTML is read; a mail's first paragraph sits well inside it. */
 export const HTML_TEXT_MAX = 1_048_576;
@@ -18,7 +18,7 @@ const HIDDEN_ATTR = /(?:^|\s)hidden(?:\s|=|\/|$)/i;
 const PARAGRAPH = "\n\n";
 
 function hidden(attrs: string): boolean {
-  if (HIDDEN_ATTR.test(attrs)) return true;
+  if (HIDDEN_ATTR.test(attrs.replace(/"[^"]*"|'[^']*'/g, ""))) return true;
   const style = /(?:^|\s)style\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(attrs);
   return style !== null && HIDDEN_STYLE.test(style[1] ?? style[2] ?? "");
 }

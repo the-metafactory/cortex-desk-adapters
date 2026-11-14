@@ -87,8 +87,23 @@ it("turns HTML into the text a reader sees", () => {
   expect(htmlText("<script>never closed")).toBe("");
 });
 
+it("does not read the word hidden inside an attribute value as the hidden attribute", () => {
+  expect(htmlText('<a title="no hidden fees" class="x hidden y">Pay now</a>')).toBe("Pay now");
+});
+
 it("scans hostile HTML in linear time", () => {
-  const started = performance.now();
-  htmlText(`${"<div ".repeat(100_000)}${"<!--".repeat(50_000)}${'<p style="'.repeat(50_000)}`);
-  expect(performance.now() - started).toBeLessThan(2000);
+  const hostile = [
+    "<div>".repeat(200_000),
+    '<p style="display:none">'.repeat(100_000),
+    `<span hidden>${"<span>".repeat(100_000)}`,
+    "<style>x</style>".repeat(100_000),
+    "<!--x-->".repeat(100_000),
+    "&#x41;&amp;".repeat(100_000),
+    "<div ".repeat(100_000),
+  ];
+  for (const html of hostile) {
+    const started = performance.now();
+    htmlText(html);
+    expect(performance.now() - started).toBeLessThan(1000);
+  }
 });

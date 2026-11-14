@@ -60,8 +60,7 @@ export function firstParagraph(getOutput: string): string | undefined {
 
 /** The same paragraph from `email get --html` output, read from the HTML body's visible text. */
 export function firstParagraphOfHtml(getHtmlOutput: string): string | undefined {
-  const body = bodyOf(getHtmlOutput);
-  return body === NO_BODY ? undefined : paragraphOf(htmlText(body));
+  return paragraphOf(htmlText(bodyOf(getHtmlOutput)));
 }
 
 /**
