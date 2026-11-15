@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Build the Swift binaries
+        run: |
+          bash mac/build.sh "$RUNNER_TEMP/mac"
+          bash mac/build-availability.sh "$RUNNER_TEMP/mac"
+          bash mac/build-reminders.sh
+      - name: Type check
+        run: bunx tsc --noEmit
+      - name: Test
+        run: bun test
