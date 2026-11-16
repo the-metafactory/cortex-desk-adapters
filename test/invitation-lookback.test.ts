@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { DeskMailInvitation } from "../src/cortex-contract";
 import { parseReply } from "../src/invitation";
-import { addReply, answeredInSent, invitationOpen, invitationOver, lookbackItems, type LookbackCandidate } from "../src/invitation-lookback";
+import { addReply, answeredInSent, invitationOpen, lookbackItems, type LookbackCandidate } from "../src/invitation-lookback";
 
 const NOW = Date.parse("2026-11-02T12:00:00Z");
 
@@ -51,12 +51,12 @@ describe("invitation state", () => {
   });
 
   test("an event is over at its end, or its start without an end; a recurring one never", () => {
-    expect(invitationOver(invitation(), NOW)).toBe(false);
-    expect(invitationOver(invitation({ start: "2026-11-02T10:00:00Z", end: "2026-11-02T13:00:00Z" }), NOW)).toBe(false);
-    expect(invitationOver(invitation({ start: "2026-11-02T10:00:00Z", end: "2026-11-02T11:00:00Z" }), NOW)).toBe(true);
+    expect(invitationOpen(invitation(), new Map(), NOW)).toBe(true);
+    expect(invitationOpen(invitation({ start: "2026-11-02T10:00:00Z", end: "2026-11-02T13:00:00Z" }), new Map(), NOW)).toBe(true);
+    expect(invitationOpen(invitation({ start: "2026-11-02T10:00:00Z", end: "2026-11-02T11:00:00Z" }), new Map(), NOW)).toBe(false);
     const { end: _end, ...noEnd } = invitation({ start: "2026-11-01T10:00:00Z" });
-    expect(invitationOver(noEnd, NOW)).toBe(true);
-    expect(invitationOver(invitation({ start: "2026-10-01T10:00:00Z", end: "2026-10-01T11:00:00Z", recurring: true }), NOW)).toBe(false);
+    expect(invitationOpen(noEnd, new Map(), NOW)).toBe(false);
+    expect(invitationOpen(invitation({ start: "2026-10-01T10:00:00Z", end: "2026-10-01T11:00:00Z", recurring: true }), new Map(), NOW)).toBe(true);
   });
 
   test("being read does not answer an invitation", () => {
