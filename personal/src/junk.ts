@@ -1,4 +1,4 @@
-import type { DeskSourceMail } from "../../src/contract";
+import type { DeskSourceMail } from "../../src/cortex-contract";
 import { toDeskMail, type EmailListEntry } from "../../src/mail";
 import { pickFolder, type Folder } from "../../src/move";
 

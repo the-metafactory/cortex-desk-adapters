@@ -1,4 +1,4 @@
-import type { DeskMailInvitation, DeskSourceMail } from "./contract";
+import type { DeskMailInvitation, DeskSourceMail } from "./cortex-contract";
 import { appleMailUrl } from "./apple-mail-url";
 import { bareMessageId } from "./move";
 import { address, type SentEnvelope } from "./sent";

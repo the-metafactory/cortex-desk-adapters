@@ -1,4 +1,4 @@
-import type { DeskSourceMail } from "./contract";
+import type { DeskSourceMail } from "./cortex-contract";
 import { imapAccount } from "./imap-account";
 import type { MailConfigReader } from "./mail-config";
 import { spawnRunner, type Runner } from "./run";

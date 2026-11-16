@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { DeskSourceEvent, DeskSourceOutput } from "../../src/contract";
+import type { DeskSourceEvent } from "../../src/cortex-contract";
+import type { DeskSourceOutput } from "../../src/contract";
 
 const instant = z.iso.datetime({ offset: true });
 export const ExchangeAvailabilitySchema = z.object({

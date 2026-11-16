@@ -18,7 +18,8 @@
  */
 import { parseArgs } from "node:util";
 import { bodyTargets, unreadTargets, toDeskMail, readFirstParagraph, type EmailListEntry } from "../../src/mail";
-import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceOutput, DeskSourceSentMail } from "../../src/contract";
+import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceSentMail } from "../../src/cortex-contract";
+import type { DeskSourceOutput } from "../../src/contract";
 import { errorText, readHeaders, readInvitations, readLinks, readLookback, readSent } from "../../src/imap";
 import { accountAddresses } from "../../src/smtp";
 import { withMailbox } from "../../src/imap";

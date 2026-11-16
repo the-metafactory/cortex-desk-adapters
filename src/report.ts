@@ -1,4 +1,5 @@
-import type { DeskMailReportRequest, DeskWriteResult } from "./contract";
+import type { DeskMailReportRequest } from "./cortex-contract";
+import type { DeskWriteResult } from "./contract";
 import { isRecord } from "./guards";
 import { bareMessageId, folderByUse, pickFolder, type Folder } from "./move";
 import { Refusal } from "./writers";

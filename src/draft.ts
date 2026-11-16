@@ -1,4 +1,5 @@
-import type { DeskMailDraftRequest, DeskWriteResult } from "./contract";
+import type { DeskMailDraftRequest } from "./cortex-contract";
+import type { DeskWriteResult } from "./contract";
 import { isRecord } from "./guards";
 import { folderByUse, type Folder } from "./move";
 import { lastLine, type Runner } from "./run";

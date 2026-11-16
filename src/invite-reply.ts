@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DeskInviteReplyRequest, DeskWriteResult } from "./contract";
+import type { DeskInviteReplyRequest } from "./cortex-contract";
+import type { DeskWriteResult } from "./contract";
 import { buildReply, parseInvitation, replyMessage } from "./invitation";
 import type { SmtpAccount } from "./smtp";
 import { readLedger, writeLedger } from "./ledger";

@@ -1,4 +1,4 @@
-import type { DeskMailLink } from "./contract";
+import type { DeskMailLink } from "./cortex-contract";
 import { decode } from "./entities";
 import { HOST_LABELS } from "./host";
 

@@ -1,5 +1,5 @@
 import { eventPeople } from "./attendees";
-import type { DeskSourceEvent } from "./contract";
+import type { DeskSourceEvent } from "./cortex-contract";
 
 const DAY_MS = 86_400_000;
 const MAX_SCAN_DAYS = 366 * 200;

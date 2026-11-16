@@ -1,7 +1,8 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DeskGoalFields, DeskTaskFields, DeskWriteInput, DeskWriteKind, DeskWriteResult } from "./contract";
+import type { DeskGoalFields, DeskTaskFields, DeskWriteInput, DeskWriteKind } from "./cortex-contract";
+import type { DeskWriteResult } from "./contract";
 import { isRecord } from "./guards";
 import { lastLine, type Runner } from "./run";
 

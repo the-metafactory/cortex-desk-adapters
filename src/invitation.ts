@@ -1,4 +1,4 @@
-import type { DeskInviteReplyRequest, DeskMailInvitation, DeskPartStat } from "./contract";
+import type { DeskInviteReplyRequest, DeskMailInvitation, DeskPartStat } from "./cortex-contract";
 import { isRecord } from "./guards";
 import { parseProperty, parseTime, toInstant, unescapeText, unfold, type IcsProperty } from "./ics";
 import { Refusal } from "./writers";

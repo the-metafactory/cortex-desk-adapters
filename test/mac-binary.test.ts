@@ -1,7 +1,7 @@
 import { expect, it } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { DeskSourceEvent } from "../src/contract";
+import type { DeskSourceEvent } from "../src/cortex-contract";
 
 const binary = join(import.meta.dir, "..", "dist", "desk-calendar-mac");
 const runnable = process.platform === "darwin" && existsSync(binary);

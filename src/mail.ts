@@ -1,4 +1,4 @@
-import type { DeskSourceMail } from "./contract";
+import type { DeskSourceMail } from "./cortex-contract";
 import { appleMailUrl } from "./apple-mail-url";
 import { htmlText } from "./html-text";
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { DeskMailInvitation } from "../src/contract";
+import type { DeskMailInvitation } from "../src/cortex-contract";
 import { parseReply } from "../src/invitation";
 import { addReply, answeredInSent, invitationOpen, invitationOver, lookbackItems, type LookbackCandidate } from "../src/invitation-lookback";
 
