@@ -47,8 +47,8 @@ export function connectImap(account: ImapAccount): ImapFlow {
   });
 }
 
-async function withImapClient<T>(account: string, work: (client: ImapFlow) => Promise<T>): Promise<T> {
-  const client = connectImap(await imapAccount(account, spawnRunner));
+async function withImapClient<T>(account: string, work: (client: ImapFlow) => Promise<T>, configPath?: string): Promise<T> {
+  const client = connectImap(await imapAccount(account, spawnRunner, configPath));
   client.on("error", () => undefined);
   try {
     await client.connect();
@@ -62,11 +62,20 @@ async function withImapClient<T>(account: string, work: (client: ImapFlow) => Pr
   }
 }
 
-/** Connects to one account from the `email` CLI's config, runs `work` on its mailbox, and always logs out. */
-export const withMailbox = <T>(account: string, work: (box: Mailbox) => Promise<T>): Promise<T> => withImapClient(account, (client) => work(imapMailbox(client)));
+/** Connects to one account from the selected mail config, runs `work` on its mailbox, and always logs out. */
+export const withMailbox = <T>(account: string, work: (box: Mailbox) => Promise<T>, configPath?: string): Promise<T> => withImapClient(account, (client) => work(imapMailbox(client)), configPath);
+
+export interface MailboxOptions {
+  mailbox?: string;
+  configPath?: string;
+}
+
+export interface HeadersOptions extends MailboxOptions {
+  trustedAuthserv?: readonly string[];
+}
 
 /** Reads the Desk's header fields for these INBOX UIDs, read-only (BODY.PEEK), so no message is marked read. */
-export async function readHeaders(account: string, uids: number[], trustedAuthserv: readonly string[] = [], mailbox = "INBOX"): Promise<Map<number, DeskMailHeaders>> {
+export async function readHeaders(account: string, uids: number[], { trustedAuthserv = [], mailbox = "INBOX", configPath }: HeadersOptions = {}): Promise<Map<number, DeskMailHeaders>> {
   const out = new Map<number, DeskMailHeaders>();
   if (uids.length === 0) return out;
   return withImapClient(account, async (client) => {
@@ -80,7 +89,7 @@ export async function readHeaders(account: string, uids: number[], trustedAuthse
       lock.release();
     }
     return out;
-  });
+  }, configPath);
 }
 
 interface Part {
@@ -107,7 +116,7 @@ export const attachmentsOf = (structure: Part | undefined): (Attachment & { part
  * A read-only ReportMailbox over one account's INBOX: the mailbox is opened with EXAMINE and parts are fetched with
  * BODY.PEEK, so the mail is never marked read. It refuses a Message-ID that matches no message or more than one.
  */
-export async function withReportMailbox<T>(account: string, work: (box: ReportMailbox) => Promise<T>, mailbox = "INBOX"): Promise<T> {
+export async function withReportMailbox<T>(account: string, work: (box: ReportMailbox) => Promise<T>, { mailbox = "INBOX", configPath }: MailboxOptions = {}): Promise<T> {
   return withImapClient(account, async (client) => {
     const lock = await client.getMailboxLock(mailbox, { readOnly: true });
     try {
@@ -140,7 +149,7 @@ export async function withReportMailbox<T>(account: string, work: (box: ReportMa
     } finally {
       lock.release();
     }
-  });
+  }, configPath);
 }
 
 const htmlPart = (structure: Part | undefined): string | undefined => {
@@ -148,8 +157,13 @@ const htmlPart = (structure: Part | undefined): string | undefined => {
   return html ? html.part ?? "1" : undefined;
 };
 
+export interface LinksOptions extends MailboxOptions {
+  warn?: (line: string) => void;
+  maxBytes?: number;
+}
+
 /** The links of each message's HTML body, for these INBOX UIDs, read-only (EXAMINE, BODY.PEEK), so no message is marked read. */
-export async function readLinks(account: string, uids: number[], warn: (line: string) => void = () => undefined, mailbox = "INBOX", maxBytes = 256 * 1024): Promise<Map<number, DeskMailLink[]>> {
+export async function readLinks(account: string, uids: number[], { warn = () => undefined, mailbox = "INBOX", maxBytes = 256 * 1024, configPath }: LinksOptions = {}): Promise<Map<number, DeskMailLink[]>> {
   const out = new Map<number, DeskMailLink[]>();
   if (uids.length === 0) return out;
   return withImapClient(account, async (client) => {
@@ -172,7 +186,7 @@ export async function readLinks(account: string, uids: number[], warn: (line: st
       lock.release();
     }
     return out;
-  });
+  }, configPath);
 }
 
 async function findOriginal(client: ImapFlow, account: string, folder: string, messageId: string): Promise<Uint8Array | undefined> {
@@ -211,8 +225,8 @@ export const phishingReportBox = (client: ImapFlow, account: string): PhishingRe
 });
 
 /** Runs `work` on a PhishingReportBox for one account: originals are read with EXAMINE and BODY.PEEK; the draft goes to Drafts. */
-export function withPhishingReportBox<T>(account: string, work: (box: PhishingReportBox, user: string) => Promise<T>): Promise<T> {
-  return imapAccount(account, spawnRunner).then((acct) => withImapClient(account, (client) => work(phishingReportBox(client, account), acct.user)));
+export function withPhishingReportBox<T>(account: string, work: (box: PhishingReportBox, user: string) => Promise<T>, configPath?: string): Promise<T> {
+  return imapAccount(account, spawnRunner, configPath).then((acct) => withImapClient(account, (client) => work(phishingReportBox(client, account), acct.user), configPath));
 }
 
 export interface SentOptions {
@@ -283,7 +297,7 @@ const candidatesIn = (client: ImapFlow, path: string, since: Date): Promise<Repl
  * replies found in INBOX and the archive folder. Sent folders that cannot be read are skipped with a warning. When a
  * reply folder cannot be read it lists no sent mail at all, so answered mail never looks unanswered.
  */
-export async function readSent(account: string, options: SentOptions): Promise<DeskSourceSentMail[]> {
+export async function readSent(account: string, options: SentOptions, configPath?: string): Promise<DeskSourceSentMail[]> {
   const warn = options.warn ?? (() => undefined);
   const since = new Date((options.now ?? Date.now()) - options.days * DAY_MS);
   return withImapClient(account, async (client) => {
@@ -329,7 +343,7 @@ export async function readSent(account: string, options: SentOptions): Promise<D
       });
     }
     return sent.sort((a, b) => Date.parse(b.sentAt) - Date.parse(a.sentAt));
-  });
+  }, configPath);
 }
 
 const CALENDAR_BYTES = 256 * 1024;
@@ -341,8 +355,12 @@ async function downloadText(client: ImapFlow, uid: number, part: string, maxByte
   return Buffer.concat(chunks).toString("utf8");
 }
 
+export interface InvitationOptions extends MailboxOptions {
+  warn?: (line: string) => void;
+}
+
 /** The calendar invitations of these INBOX UIDs, read-only (EXAMINE, BODY.PEEK), so no message is marked read. */
-export async function readInvitations(account: string, uids: number[], self: readonly string[], warn: (line: string) => void = () => undefined, mailbox = "INBOX"): Promise<Map<number, DeskMailInvitation>> {
+export async function readInvitations(account: string, uids: number[], self: readonly string[], { warn = () => undefined, mailbox = "INBOX", configPath }: InvitationOptions = {}): Promise<Map<number, DeskMailInvitation>> {
   const out = new Map<number, DeskMailInvitation>();
   if (uids.length === 0) return out;
   return withImapClient(account, async (client) => {
@@ -362,7 +380,7 @@ export async function readInvitations(account: string, uids: number[], self: rea
       lock.release();
     }
     return out;
-  });
+  }, configPath);
 }
 
 interface CalendarText {
@@ -402,7 +420,7 @@ export interface LookbackOptions {
  * (from its Sent folders), and the INBOX invitations since `since` that are not in `skip`. A Sent folder that cannot be
  * read is skipped with a warning, so an invitation answered there may still show.
  */
-export async function readLookback(account: string, options: LookbackOptions): Promise<{ replies: Map<string, number>; candidates: LookbackCandidate[] }> {
+export async function readLookback(account: string, options: LookbackOptions, configPath?: string): Promise<{ replies: Map<string, number>; candidates: LookbackCandidate[] }> {
   const warn = options.warn ?? (() => undefined);
   return withImapClient(account, async (client) => {
     const replies = new Map<string, number>();
@@ -429,11 +447,11 @@ export async function readLookback(account: string, options: LookbackOptions): P
       });
     });
     return { replies, candidates };
-  });
+  }, configPath);
 }
 
 /** The text/calendar part of the one INBOX message with this Message-ID, read-only; undefined when it carries none. */
-export async function invitationSource(account: string, messageId: string, mailbox = "INBOX"): Promise<string | undefined> {
+export async function invitationSource(account: string, messageId: string, mailbox = "INBOX", configPath?: string): Promise<string | undefined> {
   return withImapClient(account, async (client) => {
     const lock = await client.getMailboxLock(mailbox, { readOnly: true });
     try {
@@ -447,5 +465,5 @@ export async function invitationSource(account: string, messageId: string, mailb
     } finally {
       lock.release();
     }
-  });
+  }, configPath);
 }

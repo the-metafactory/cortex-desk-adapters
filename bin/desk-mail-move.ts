@@ -5,8 +5,8 @@
  *     with that Message-ID to the account's folder for the target;
  *   { "action": "restore", "account", "messageId", "from": "archive" | "junk" | "trash" } moves it back to INBOX (Undo);
  *   { "action": "locate", "account", "messageId" } reports, read-only, whether it is in INBOX, Archive, Junk, Trash or gone.
- * IMAP MOVE only; it never deletes or expunges. Uses the `email` CLI's account config.
- * Usage: desk-mail-move [--mailbox INBOX]
+ * IMAP MOVE only; it never deletes or expunges. Uses the selected mail account config (default ~/.config/email/config.json).
+ * Usage: desk-mail-move [--config <path>] [--mailbox INBOX]
  */
 import { parseArgs } from "node:util";
 import { withMailbox } from "../src/imap";
@@ -16,6 +16,7 @@ import type { DeskWriteResult } from "../src/contract";
 
 const { values } = parseArgs({
   options: {
+    config: { type: "string" },
     mailbox: { type: "string" },
   },
 });
@@ -25,5 +26,5 @@ await runWriter(async (text) => {
   return withMailbox<DeskWriteResult>(req.account, (box) => {
     if (req.action === "locate") return locateMessage(req, box, values.mailbox);
     return req.action === "move" ? moveMessage(req, box, values.mailbox) : restoreMessage(req, box, values.mailbox);
-  });
+  }, values.config);
 });

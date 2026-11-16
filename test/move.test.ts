@@ -167,7 +167,7 @@ it("reads the account from the email config, case-insensitively, with the passwo
 it("refuses an unknown account, one without IMAP, and a missing keychain item", async () => {
   const path = join(dir, "config.json");
   writeFileSync(path, JSON.stringify({ accounts: { work: { smtp: { auth: { user: "ada", pass: "x" } } } } }));
-  await expect(imapAccount("home", keychain("x").run, path)).rejects.toThrow("There is no home account in the email config.");
+  await expect(imapAccount("home", keychain("x").run, path)).rejects.toThrow("There is no home account in the mail config.");
   await expect(imapAccount("work", keychain("x").run, path)).rejects.toThrow("The work account has no IMAP settings.");
   await expect(resolvePassword("keychain:nope", keychain("", 44).run)).rejects.toThrow("The mail password could not be read from the keychain.");
   expect(await resolvePassword("env:MAIL_PASS", keychain("x").run, { MAIL_PASS: "p" })).toBe("p");
