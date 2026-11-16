@@ -13,12 +13,16 @@
  * event is over. The look-back covers the longer of --days and --invite-days (default 14, at most 60): Sent for
  * replies, and INBOX mail that --days and --limit did not list, read only for its invitation: at most the newest --invite-scan messages (default 200, at most 1000) are scanned, and at most
  * --invite-limit mails (default 10, at most 50) with an open invitation are added. No other older mail is listed.
+ * Each account's junk folder (the one desk-mail-move uses) is listed read-only: the newest 20 messages of the last 7 days
+ * become the output's `junk`, without bodies. An account whose junk cannot be read is named in `problems` and adds none.
  */
 import { parseArgs } from "node:util";
 import { bodyTargets, unreadTargets, toDeskMail, readFirstParagraph, type EmailListEntry } from "../src/mail";
 import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceOutput, DeskSourceSentMail } from "../src/contract";
 import { errorText, readHeaders, readInvitations, readLinks, readLookback, readSent } from "../src/imap";
 import { accountAddresses } from "../src/smtp";
+import { withMailbox } from "../src/imap";
+import { readJunk } from "../src/junk";
 import { bareMessageId } from "../src/move";
 import { invitationOpen, LOOKBACK, lookbackItems, type LookbackCandidate } from "../src/invitation-lookback";
 
@@ -62,6 +66,9 @@ async function run(args: string[]): Promise<string> {
 }
 
 const items: (DeskSourceMail | DeskSourceSentMail)[] = [];
+const junk: DeskSourceMail[] = [];
+const problems: string[] = [];
+let junkRead = false;
 for (const account of values.account ?? []) {
   const listed = JSON.parse(await run(["list", "-a", account, "-s", values.days ?? "3", "-l", values.limit ?? "40", "-o", "json"])) as EmailListEntry[];
   const unread = unreadTargets(listed, Number(values.bodies));
@@ -104,6 +111,13 @@ for (const account of values.account ?? []) {
     const h = headers.get(o.uid);
     items.push({ ...o.mail, ...(h ? { headers: h } : {}) });
   }
+  try {
+    junk.push(...(await readJunk(run, () => withMailbox(account, (box) => box.folders()), account)));
+    junkRead = true;
+  } catch (err) {
+    problems.push(`${account}: junk mail was not read: ${errorText(err)}`);
+    warn(`junk mail was not read: ${errorText(err)}`);
+  }
   if (values.sent) {
     try {
       items.push(...(await readSent(account, { days: sentDays, limit: sentLimit, warn })));
@@ -113,5 +127,5 @@ for (const account of values.account ?? []) {
   }
 }
 
-const output: DeskSourceOutput = { capabilities: ["attention"], items };
+const output: DeskSourceOutput = { capabilities: ["attention"], items, ...(junkRead ? { junk } : {}), ...(problems.length ? { problems } : {}) };
 process.stdout.write(JSON.stringify(output));

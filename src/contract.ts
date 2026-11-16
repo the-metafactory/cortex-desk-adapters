@@ -137,6 +137,10 @@ export interface DeskSourceOutput {
   };
   events?: DeskSourceEvent[];
   items?: (DeskSourceMail | DeskSourceSentMail)[];
+  /** The newest 20 junk messages of the last 7 days, without bodies; omitted when no account's junk folder could be read. */
+  junk?: DeskSourceMail[];
+  /** One sentence per account part that could not be read. */
+  problems?: string[];
 }
 
 /**
