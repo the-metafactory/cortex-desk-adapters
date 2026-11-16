@@ -1,15 +1,16 @@
 import { ImapFlow } from "imapflow";
 import type { ImapAccount } from "./imap-account";
 import { imapAccount } from "./imap-account";
-import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceSentMail } from "./contract";
+import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceSentMail } from "./contract";
+import { firstParagraphOfHtmlBody } from "./mail";
 import { calendarPart, parseInvitation, parseReply, type CalendarPartNode } from "./invitation";
-import { addReply, type LookbackCandidate } from "./invitation-lookback";
+import { addReply, invitationOpen, lookbackItems, type LookbackCandidate } from "./invitation-lookback";
 import { linksOf } from "./links";
 import { MAX_ORIGINAL, TOO_LARGE, type PhishingReportBox } from "./report";
 import { HEADER_FIELDS, headersOf, messageIds } from "./mail-headers";
 import { ReportRefusal, type Attachment, type ReportMailbox } from "./dmarc";
 import { bareMessageId, folderByUse, type Mailbox } from "./move";
-import { textPart, type StructureNode } from "./imap-mail";
+import { firstParagraph, textPart, toDeskMail, type StructureNode } from "./imap-mail";
 import { ARCHIVE_NAMES, replyCandidate, sentFolders, sentText, toSentMail, withReplies, type ReplyCandidate, type SentEnvelope } from "./sent";
 import { spawnRunner } from "./run";
 import { Refusal } from "./writers";
@@ -33,6 +34,57 @@ export function imapMailbox(client: ImapFlow): Mailbox {
     },
     folders: async () => (await client.list()).map((b) => ({ path: b.path, name: b.name, ...(b.specialUse ? { specialUse: b.specialUse } : {}) })),
     move: async (uid, target) => Boolean(await client.messageMove([uid], target, { uid: true })),
+  };
+}
+
+export interface ReadMessage {
+  uid: number;
+  bodyStructure?: unknown;
+  envelope?: SentEnvelope;
+  flags?: Set<string>;
+  internalDate?: Date | string;
+  headers?: Buffer;
+}
+
+export interface ReadQuery {
+  bodyStructure?: boolean;
+  envelope?: boolean;
+  flags?: boolean;
+  internalDate?: boolean;
+  headers?: string[];
+}
+
+/** The read-only side of a connected mailbox: what the item builders need, and what a fixture mailbox implements. */
+export interface ReadBox {
+  folders(): Promise<{ path: string; name: string; specialUse?: string }[]>;
+  /** Runs `work` with the folder open read-only (EXAMINE). */
+  inFolder<T>(path: string, work: () => Promise<T>): Promise<T>;
+  /** The UIDs of the open folder, newest first: those since a date, or the unseen ones, at most `max`. */
+  search(query: { since: Date } | { unseen: true }, max: number): Promise<number[]>;
+  fetch(uids: number[], query: ReadQuery): Promise<ReadMessage[]>;
+  /** One body part, read with BODY.PEEK, at most `maxBytes`. */
+  text(uid: number, part: string, maxBytes: number): Promise<string>;
+}
+
+export function imapReadBox(client: ImapFlow): ReadBox {
+  return {
+    folders: async () => (await client.list()).map((b) => ({ path: b.path, name: b.name, ...(b.specialUse ? { specialUse: b.specialUse } : {}) })),
+    inFolder: async (path, work) => {
+      const lock = await client.getMailboxLock(path, { readOnly: true });
+      try {
+        return await work();
+      } finally {
+        lock.release();
+      }
+    },
+    search: async (query, max) => ((await client.search("since" in query ? { since: query.since } : { seen: false }, { uid: true })) || []).sort((a, b) => b - a).slice(0, max),
+    fetch: async (uids, query) => (await client.fetchAll(uids, query, { uid: true })) as unknown as ReadMessage[],
+    text: async (uid, part, maxBytes) => {
+      const { content } = await client.download(String(uid), part, { uid: true, maxBytes });
+      const chunks: Buffer[] = [];
+      for await (const chunk of content) chunks.push(Buffer.from(chunk));
+      return Buffer.concat(chunks).toString("utf8");
+    },
   };
 }
 
@@ -152,7 +204,7 @@ export async function withReportMailbox<T>(account: string, work: (box: ReportMa
   }, configPath);
 }
 
-const htmlPart = (structure: Part | undefined): string | undefined => {
+export const htmlPart = (structure: Part | undefined): string | undefined => {
   const html = leaves(structure).find((p) => (p.type ?? "").toLowerCase() === "text/html" && !p.dispositionParameters?.filename);
   return html ? html.part ?? "1" : undefined;
 };
@@ -162,30 +214,29 @@ export interface LinksOptions extends MailboxOptions {
   maxBytes?: number;
 }
 
-/** The links of each message's HTML body, for these INBOX UIDs, read-only (EXAMINE, BODY.PEEK), so no message is marked read. */
-export async function readLinks(account: string, uids: number[], { warn = () => undefined, mailbox = "INBOX", maxBytes = 256 * 1024, configPath }: LinksOptions = {}): Promise<Map<number, DeskMailLink[]>> {
+/** The links of each message's HTML body, for these UIDs of the open folder, read with BODY.PEEK, so no message is marked read. */
+export async function linksIn(box: ReadBox, uids: number[], { warn = () => undefined, maxBytes = 256 * 1024 }: { warn?: (line: string) => void; maxBytes?: number } = {}): Promise<Map<number, DeskMailLink[]>> {
   const out = new Map<number, DeskMailLink[]>();
   if (uids.length === 0) return out;
-  return withImapClient(account, async (client) => {
-    const lock = await client.getMailboxLock(mailbox, { readOnly: true });
+  for (const m of await box.fetch(uids, { bodyStructure: true })) {
+    const part = htmlPart(m.bodyStructure as Part | undefined);
+    if (!part) continue;
     try {
-      for (const m of await client.fetchAll(uids, { bodyStructure: true }, { uid: true })) {
-        const part = htmlPart(m.bodyStructure as Part | undefined);
-        if (!part) continue;
-        try {
-          const { content } = await client.download(String(m.uid), part, { uid: true, maxBytes });
-          const chunks: Buffer[] = [];
-          for await (const chunk of content) chunks.push(chunk as Buffer);
-          const links = linksOf(Buffer.concat(chunks).toString("utf8"));
-          if (links.length > 0) out.set(m.uid, links);
-        } catch (err) {
-          warn(`the links of message ${m.uid} were not read: ${errorText(err)}`);
-        }
-      }
-    } finally {
-      lock.release();
+      const links = linksOf(await box.text(m.uid, part, maxBytes));
+      if (links.length > 0) out.set(m.uid, links);
+    } catch (err) {
+      warn(`the links of message ${m.uid} were not read: ${errorText(err)}`);
     }
-    return out;
+  }
+  return out;
+}
+
+/** The links of each message's HTML body, for these INBOX UIDs, read-only (EXAMINE, BODY.PEEK), so no message is marked read. */
+export async function readLinks(account: string, uids: number[], { warn = () => undefined, mailbox = "INBOX", maxBytes = 256 * 1024, configPath }: LinksOptions = {}): Promise<Map<number, DeskMailLink[]>> {
+  if (uids.length === 0) return new Map();
+  return withImapClient(account, (client) => {
+    const box = imapReadBox(client);
+    return box.inFolder(mailbox, () => linksIn(box, uids, { warn, maxBytes }));
   }, configPath);
 }
 
@@ -359,27 +410,29 @@ export interface InvitationOptions extends MailboxOptions {
   warn?: (line: string) => void;
 }
 
-/** The calendar invitations of these INBOX UIDs, read-only (EXAMINE, BODY.PEEK), so no message is marked read. */
-export async function readInvitations(account: string, uids: number[], self: readonly string[], { warn = () => undefined, mailbox = "INBOX", configPath }: InvitationOptions = {}): Promise<Map<number, DeskMailInvitation>> {
+/** The calendar invitations of these UIDs of the open folder, read with BODY.PEEK, so no message is marked read. */
+export async function invitationsIn(box: ReadBox, uids: number[], self: readonly string[], { warn = () => undefined }: { warn?: (line: string) => void } = {}): Promise<Map<number, DeskMailInvitation>> {
   const out = new Map<number, DeskMailInvitation>();
   if (uids.length === 0) return out;
-  return withImapClient(account, async (client) => {
-    const lock = await client.getMailboxLock(mailbox, { readOnly: true });
+  for (const m of await box.fetch(uids, { bodyStructure: true })) {
+    const part = calendarPart(m.bodyStructure as CalendarPartNode | undefined);
+    if (!part) continue;
     try {
-      for (const m of await client.fetchAll(uids, { bodyStructure: true }, { uid: true })) {
-        const part = calendarPart(m.bodyStructure as CalendarPartNode | undefined);
-        if (!part) continue;
-        try {
-          const invitation = parseInvitation(await downloadText(client, m.uid, part, CALENDAR_BYTES), self);
-          if (invitation) out.set(m.uid, invitation);
-        } catch (err) {
-          warn(`the invitation of message ${m.uid} was not read: ${errorText(err)}`);
-        }
-      }
-    } finally {
-      lock.release();
+      const invitation = parseInvitation(await box.text(m.uid, part, CALENDAR_BYTES), self);
+      if (invitation) out.set(m.uid, invitation);
+    } catch (err) {
+      warn(`the invitation of message ${m.uid} was not read: ${errorText(err)}`);
     }
-    return out;
+  }
+  return out;
+}
+
+/** The calendar invitations of these INBOX UIDs, read-only (EXAMINE, BODY.PEEK), so no message is marked read. */
+export async function readInvitations(account: string, uids: number[], self: readonly string[], { warn = () => undefined, mailbox = "INBOX", configPath }: InvitationOptions = {}): Promise<Map<number, DeskMailInvitation>> {
+  if (uids.length === 0) return new Map();
+  return withImapClient(account, (client) => {
+    const box = imapReadBox(client);
+    return box.inFolder(mailbox, () => invitationsIn(box, uids, self, { warn }));
   }, configPath);
 }
 
@@ -390,14 +443,14 @@ interface CalendarText {
   flags?: Set<string>;
 }
 
-async function calendarTexts(client: ImapFlow, uids: number[], warn: (line: string) => void, query: { envelope?: boolean; flags?: boolean } = {}): Promise<CalendarText[]> {
+async function calendarTexts(box: ReadBox, uids: number[], warn: (line: string) => void, query: { envelope?: boolean; flags?: boolean } = {}): Promise<CalendarText[]> {
   if (uids.length === 0) return [];
   const out: CalendarText[] = [];
-  for (const m of await client.fetchAll(uids, { bodyStructure: true, ...query }, { uid: true })) {
+  for (const m of await box.fetch(uids, { bodyStructure: true, ...query })) {
     const part = calendarPart(m.bodyStructure as CalendarPartNode | undefined);
     if (!part) continue;
     try {
-      out.push({ uid: m.uid, ics: await downloadText(client, m.uid, part, CALENDAR_BYTES), ...(m.envelope ? { envelope: m.envelope as SentEnvelope } : {}), ...(m.flags ? { flags: m.flags } : {}) });
+      out.push({ uid: m.uid, ics: await box.text(m.uid, part, CALENDAR_BYTES), ...(m.envelope ? { envelope: m.envelope } : {}), ...(m.flags ? { flags: m.flags } : {}) });
     } catch (err) {
       warn(`the calendar part of message ${m.uid} was not read: ${errorText(err)}`);
     }
@@ -420,35 +473,35 @@ export interface LookbackOptions {
  * (from its Sent folders), and the INBOX invitations since `since` that are not in `skip`. A Sent folder that cannot be
  * read is skipped with a warning, so an invitation answered there may still show.
  */
-export async function readLookback(account: string, options: LookbackOptions, configPath?: string): Promise<{ replies: Map<string, number>; candidates: LookbackCandidate[] }> {
+export async function lookbackIn(box: ReadBox, options: LookbackOptions): Promise<{ replies: Map<string, number>; candidates: LookbackCandidate[] }> {
   const warn = options.warn ?? (() => undefined);
-  return withImapClient(account, async (client) => {
-    const replies = new Map<string, number>();
-    const boxes = (await client.list()).map((b) => ({ path: b.path, name: b.name, ...(b.specialUse ? { specialUse: b.specialUse } : {}) }));
-    const sentPaths = sentFolders(boxes);
-    if (sentPaths.length === 0) warn("no Sent folder was found, so invitations answered outside the Desk are not recognised");
-    for (const path of sentPaths) {
-      try {
-        await inFolder(client, path, async () => {
-          for (const { ics } of await calendarTexts(client, await newestUids(client, options.since, options.scan), warn)) {
-            const reply = parseReply(ics);
-            if (reply) addReply(replies, reply);
-          }
-        });
-      } catch (err) {
-        warn(`invitation replies in ${path} were not read: ${errorText(err)}`);
-      }
-    }
-    const candidates = await inFolder(client, "INBOX", async () => {
-      const uids = (await newestUids(client, options.since, options.scan)).filter((uid) => !options.skip.has(uid));
-      return (await calendarTexts(client, uids, warn, { envelope: true, flags: true })).flatMap((m): LookbackCandidate[] => {
-        const invitation = m.envelope ? parseInvitation(m.ics, options.self) : null;
-        return invitation && m.envelope ? [{ uid: m.uid, envelope: m.envelope, flags: m.flags, invitation }] : [];
+  const replies = new Map<string, number>();
+  const sentPaths = sentFolders(await box.folders());
+  if (sentPaths.length === 0) warn("no Sent folder was found, so invitations answered outside the Desk are not recognised");
+  for (const path of sentPaths) {
+    try {
+      await box.inFolder(path, async () => {
+        for (const { ics } of await calendarTexts(box, await box.search({ since: options.since }, options.scan), warn)) {
+          const reply = parseReply(ics);
+          if (reply) addReply(replies, reply);
+        }
       });
+    } catch (err) {
+      warn(`invitation replies in ${path} were not read: ${errorText(err)}`);
+    }
+  }
+  const candidates = await box.inFolder("INBOX", async () => {
+    const uids = (await box.search({ since: options.since }, options.scan)).filter((uid) => !options.skip.has(uid));
+    return (await calendarTexts(box, uids, warn, { envelope: true, flags: true })).flatMap((m): LookbackCandidate[] => {
+      const invitation = m.envelope ? parseInvitation(m.ics, options.self) : null;
+      return invitation && m.envelope ? [{ uid: m.uid, envelope: m.envelope, flags: m.flags, invitation }] : [];
     });
-    return { replies, candidates };
-  }, configPath);
+  });
+  return { replies, candidates };
 }
+
+export const readLookback = (account: string, options: LookbackOptions, configPath?: string): Promise<{ replies: Map<string, number>; candidates: LookbackCandidate[] }> =>
+  withImapClient(account, (client) => lookbackIn(imapReadBox(client), options), configPath);
 
 /** The text/calendar part of the one INBOX message with this Message-ID, read-only; undefined when it carries none. */
 export async function invitationSource(account: string, messageId: string, mailbox = "INBOX", configPath?: string): Promise<string | undefined> {
@@ -466,4 +519,90 @@ export async function invitationSource(account: string, messageId: string, mailb
       lock.release();
     }
   }, configPath);
+}
+
+export interface ItemsInput {
+  account: string;
+  mailbox: string;
+  limit: number;
+  /** The account's own addresses, for the invitation's attendee. */
+  self: readonly string[];
+  authserv?: readonly string[];
+  invite: { days: number; scan: number; limit: number };
+  now?: number;
+  warn?: (line: string) => void;
+}
+
+const LIST_TEXT_BYTES = 16_384;
+const LIST_HTML_BYTES = 256 * 1024;
+
+async function paragraphOf(box: ReadBox, m: ReadMessage): Promise<string | undefined> {
+  const structure = m.bodyStructure as StructureNode & Part | undefined;
+  const plain = textPart(structure);
+  if (plain) return firstParagraph(await box.text(m.uid, plain, LIST_TEXT_BYTES));
+  const html = htmlPart(structure);
+  return html ? firstParagraphOfHtmlBody(await box.text(m.uid, html, LIST_HTML_BYTES), m.envelope?.subject) : undefined;
+}
+
+/**
+ * The Desk items of the newest unread mail in `mailbox`, with the `links` and `invitation` and the HTML-only
+ * `firstParagraph` that `desk-mail` prints for the same messages, plus INBOX mail from the look-back that holds an open
+ * invitation. Everything is read with BODY.PEEK in read-only folders. A failed links, invitations or look-back read
+ * lists the mail without that field and warns once.
+ */
+export async function readItems(box: ReadBox, input: ItemsInput): Promise<DeskSourceMail[]> {
+  const warn = input.warn ?? (() => undefined);
+  const now = input.now ?? Date.now();
+  const orEmpty = <V>(what: string) => (err: unknown): Map<number, V> => {
+    warn(`${what} were not read: ${errorText(err)}`);
+    return new Map();
+  };
+  const listed = await box.inFolder(input.mailbox, async () => {
+    const uids = await box.search({ unseen: true }, input.limit);
+    if (uids.length === 0) return null;
+    const messages = await box.fetch(uids, { envelope: true, bodyStructure: true, internalDate: true, headers: HEADER_FIELDS });
+    const paragraphs = new Map<number, string | undefined>();
+    for (const m of messages) paragraphs.set(m.uid, await paragraphOf(box, m).catch(() => undefined));
+    const links = await linksIn(box, uids, { warn }).catch(orEmpty<DeskMailLink[]>("links"));
+    const invitations = await invitationsIn(box, uids, input.self, { warn }).catch(orEmpty<DeskMailInvitation>("invitations"));
+    return { messages, paragraphs, links, invitations };
+  });
+  const messages = listed?.messages ?? [];
+  const lookback = await lookbackIn(box, {
+    since: new Date(now - input.invite.days * DAY_MS),
+    scan: input.invite.scan,
+    skip: new Set(messages.map((m) => m.uid)),
+    self: input.self,
+    warn,
+  }).catch((err: unknown) => {
+    warn(`older invitations and invitation replies were not read: ${errorText(err)}`);
+    return { replies: new Map<string, number>(), candidates: [] as LookbackCandidate[] };
+  });
+  const items: DeskSourceMail[] = [];
+  for (const m of messages) {
+    const received = m.internalDate ? new Date(m.internalDate) : new Date(now);
+    const item = m.envelope ? toDeskMail(m.envelope, input.account, listed?.paragraphs.get(m.uid), received) : null;
+    if (!item) continue;
+    const headers = headersOf(m, input.authserv);
+    const links = listed?.links.get(m.uid);
+    const found = listed?.invitations.get(m.uid);
+    const invitation = found && invitationOpen(found, lookback.replies, now) ? found : undefined;
+    items.push({ ...item, ...(headers ? { headers } : {}), ...(links ? { links } : {}), ...(invitation ? { invitation } : {}) });
+  }
+  const older = lookbackItems(lookback.candidates, { account: input.account, listed: new Set(items.map((i) => i.id)), replies: lookback.replies, now, limit: input.invite.limit });
+  const olderHeaders = older.length === 0
+    ? new Map<number, DeskMailHeaders>()
+    : await box.inFolder("INBOX", async () => {
+        const out = new Map<number, DeskMailHeaders>();
+        for (const m of await box.fetch(older.map((o) => o.uid), { headers: HEADER_FIELDS })) {
+          const h = headersOf(m, input.authserv);
+          if (h) out.set(m.uid, h);
+        }
+        return out;
+      }).catch(orEmpty<DeskMailHeaders>("headers"));
+  for (const o of older) {
+    const h = olderHeaders.get(o.uid);
+    items.push({ ...o.mail, ...(h ? { headers: h } : {}) });
+  }
+  return items;
 }
