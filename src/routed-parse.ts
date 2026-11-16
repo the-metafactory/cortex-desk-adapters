@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import type { DeskParseResult } from "./contract";
 import { isRecord } from "./guards";
-import { buildPrompt, extractJson, readParseRequest, validateParse } from "./parse";
+import { extractJson, readParseRequest, validateParse } from "./parse";
 
 export type Provider = "claude" | "codex" | "pi";
 type Backend = { command: string; model: string; provider: string };
@@ -14,7 +14,6 @@ const isProvider = (v: unknown): v is Provider => v === "claude" || v === "codex
 const isText = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 const message = (v: unknown) => v instanceof Error ? v.message : String(v);
 const LIMIT = 256 * 1024;
-export const PARSER_SYSTEM = "Parse the supplied request into one JSON object. Do not use tools.";
 
 function providers(v: unknown): Provider[] {
   if (!Array.isArray(v) || !v.every(isProvider) || new Set(v).size !== v.length) throw new Error("invalid permitted providers");
@@ -122,12 +121,12 @@ export function runBounded(argv: string[], stdin: string, deadline: number, stop
 
 const PI_FLAGS = ["--no-tools", "--no-extensions", "--no-mcp", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-session", "--print", "--mode", "--system-prompt", "--provider", "--model", "--thinking"];
 const CLAUDE_FLAGS = ["--tools", "--strict-mcp-config", "--mcp-config", "--no-session-persistence", "--disable-slash-commands", "--setting-sources", "--output-format", "--print", "--model", "--safe-mode", "--system-prompt"];
-export function claudeArgv(command: string, model: string, format: "json" | "text" = "json"): string[] {
-  return [command, "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--no-session-persistence", "--disable-slash-commands", "--setting-sources", "", "--safe-mode", "--system-prompt", PARSER_SYSTEM, "--output-format", format, "--print", "--model", model];
+export function claudeArgv(command: string, model: string, system: string, format: "json" | "text" = "json"): string[] {
+  return [command, "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--no-session-persistence", "--disable-slash-commands", "--setting-sources", "", "--safe-mode", "--system-prompt", system, "--output-format", format, "--print", "--model", model];
 }
-export function providerArgv(name: Provider, backend: Backend): string[] {
-  if (name === "claude") return claudeArgv(backend.command, backend.model);
-  return [backend.command, "--no-tools", "--no-extensions", "--no-mcp", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-session", "--print", "--mode", "json", "--thinking", "off", "--system-prompt", PARSER_SYSTEM, "--provider", backend.provider, "--model", backend.model];
+export function providerArgv(name: Provider, backend: Backend, system: string): string[] {
+  if (name === "claude") return claudeArgv(backend.command, backend.model, system);
+  return [backend.command, "--no-tools", "--no-extensions", "--no-mcp", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-session", "--print", "--mode", "json", "--thinking", "off", "--system-prompt", system, "--provider", backend.provider, "--model", backend.model];
 }
 
 export function readSelection(raw: string): Selection {
@@ -200,7 +199,6 @@ export async function routedParse(raw: string, config: RoutingConfig, deadline: 
       permitted = permitted.filter(p => restriction.includes(p));
     }
     const request = readParseRequest(raw);
-    const prompt = buildPrompt(request);
     const capable: Provider[] = [];
     type Capability = { provider: Provider; kind: "capable" } | { provider: Provider; kind: "excluded"; reason: string };
     const checks = await Promise.all(PROVIDERS.filter(provider => permitted.includes(provider)).map(async (provider): Promise<Capability> => {
@@ -229,7 +227,7 @@ export async function routedParse(raw: string, config: RoutingConfig, deadline: 
       const backend = config.providers[provider];
       if (!backend) throw new Error("selector chose an unconfigured provider");
       evidence.attempted.push(provider);
-      const output = await runBounded(providerArgv(provider, backend), prompt, deadline, provider !== "claude");
+      const output = await runBounded(providerArgv(provider, backend, request.messages.system), request.messages.user, deadline, provider !== "claude");
       const completion = readCompletion(provider, output.stdout, output.code);
       if (completion.kind === "quota") { evidence.fallbackReasons.push({ provider, reason: "quota-exhausted" }); continue; }
       const result: DeskParseResult = validateParse(extractJson(completion.text), request);
