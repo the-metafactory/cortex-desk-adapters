@@ -18,9 +18,6 @@ export function addReply(replies: Map<string, number>, reply: { uid: string; seq
   if (known === undefined || reply.sequence > known) replies.set(reply.uid, reply.sequence);
 }
 
-/** A reply in Sent answers the invitation when it is for the same UID and at least as new a SEQUENCE. */
-export const answeredInSent = (inv: DeskMailInvitation, replies: Replies): boolean => (replies.get(inv.uid) ?? -1) >= inv.sequence;
-
 /** The invitation still waits for the principal: Cortex's rule, applied to the highest SEQUENCE answered in Sent. */
 export const invitationOpen = (inv: DeskMailInvitation, replies: Replies, now: number): boolean => sdkInvitationOpen(inv, replies.get(inv.uid), now);
 

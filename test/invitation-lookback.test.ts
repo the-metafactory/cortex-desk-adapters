@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { DeskMailInvitation } from "../src/cortex-contract";
 import { parseReply } from "../src/invitation";
-import { addReply, answeredInSent, invitationOpen, lookbackItems, type LookbackCandidate } from "../src/invitation-lookback";
+import { addReply, invitationOpen, lookbackItems, type LookbackCandidate } from "../src/invitation-lookback";
 
 const NOW = Date.parse("2026-11-02T12:00:00Z");
 
@@ -45,9 +45,9 @@ describe("invitation state", () => {
     addReply(replies, { uid: "uid-1", sequence: 1 });
     addReply(replies, { uid: "uid-1", sequence: 0 });
     expect(replies.get("uid-1")).toBe(1);
-    expect(answeredInSent(invitation({ sequence: 1 }), replies)).toBe(true);
-    expect(answeredInSent(invitation({ sequence: 2 }), replies)).toBe(false);
-    expect(answeredInSent(invitation({ uid: "other" }), replies)).toBe(false);
+    expect(invitationOpen(invitation({ sequence: 1 }), replies, NOW)).toBe(false);
+    expect(invitationOpen(invitation({ sequence: 2 }), replies, NOW)).toBe(true);
+    expect(invitationOpen(invitation({ uid: "other" }), replies, NOW)).toBe(true);
   });
 
   test("an event is over at its end, or its start without an end; a recurring one never", () => {
