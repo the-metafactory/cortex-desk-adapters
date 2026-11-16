@@ -1,4 +1,4 @@
-import { isRecord } from "./guards";
+import { isRecord } from "../../src/guards";
 
 export const CATEGORIES = ["action", "reply", "meeting", "fyi", "bulk"] as const;
 export const SUGGESTED_ACTIONS = ["reply", "archive", "link-meeting", "task", "none"] as const;

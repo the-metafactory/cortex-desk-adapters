@@ -1,7 +1,7 @@
-import type { DeskTaskCloseRequest, DeskWriteResult } from "./contract";
-import { isRecord } from "./guards";
-import { lastLine, type Runner } from "./run";
-import { Refusal, TASK_LABEL } from "./writers";
+import type { DeskTaskCloseRequest, DeskWriteResult } from "../../src/contract";
+import { isRecord } from "../../src/guards";
+import { lastLine, type Runner } from "../../src/run";
+import { Refusal, TASK_LABEL } from "../../src/writers";
 
 const PLAIN_REF = /^([\w.-]+\/[\w.-]+)#([1-9]\d*)$/;
 const QUALIFIED_REF = /^github:([\w.-]+)\/([\w.-]+\/[\w.-]+)#([1-9]\d*)$/;

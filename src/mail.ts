@@ -1,5 +1,8 @@
 import type { DeskSourceMail } from "./contract";
+import { appleMailUrl } from "./apple-mail-url";
 import { htmlText } from "./html-text";
+
+export { appleMailUrl };
 
 /** One message as `email list -o json` prints it. */
 export interface EmailListEntry {
@@ -18,11 +21,6 @@ export function parseFrom(raw: string): { name?: string; address: string } {
   if (!match) return { address: raw.trim().toLowerCase() };
   const name = match[1]?.trim();
   return { ...(name ? { name } : {}), address: (match[2] ?? "").trim().toLowerCase() };
-}
-
-/** Apple Mail opens a message from its Message-ID: message://%3Cid%3E. */
-export function appleMailUrl(messageId: string): string {
-  return `message://${encodeURIComponent(`<${messageId.replace(/^<|>$/g, "")}>`)}`;
 }
 
 const GREETING = /^(hi|hello|hallo|hoi|salut|bonjour|dear|liebe|lieber|sehr geehrte|grüezi|guten tag)\b.{0,60}[,!:]?$/i;

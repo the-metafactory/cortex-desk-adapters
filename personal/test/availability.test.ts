@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { fromRawExchange } from "../src/calendar-availability";
-import { parseIcs } from "../src/ics";
+import { parseIcs } from "../../src/ics";
 
 const from = "2026-11-03T00:00:00Z";
 const to = "2026-11-04T00:00:00Z";

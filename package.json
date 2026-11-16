@@ -3,33 +3,24 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
-  "description": "Source adapters, writers, a parser and a mail classifier for the Cortex Desk: commands that print or create Desk JSON.",
+  "description": "Portable source adapters, writers and a parser for the Cortex Desk: commands that print or create Desk JSON. The commands that wrap the personal toolkit live in personal/.",
   "bin": {
-    "desk-calendar": "bin/desk-calendar.ts",
-    "desk-calendar-create": "bin/desk-calendar-create.ts",
-    "desk-mail": "bin/desk-mail.ts",
-    "desk-mail-move": "bin/desk-mail-move.ts",
-    "desk-mail-trash": "bin/desk-mail-trash.ts",
-    "desk-mail-draft": "bin/desk-mail-draft.ts",
-    "desk-goal": "bin/desk-goal.ts",
-    "desk-task": "bin/desk-task.ts",
-    "desk-task-close": "bin/desk-task-close.ts",
-    "desk-parse": "bin/desk-parse.ts",
-    "desk-note-tana": "bin/desk-note-tana.ts",
-    "desk-classify-mail": "bin/desk-classify-mail.ts",
     "desk-ics": "bin/desk-ics.ts",
     "desk-imap": "bin/desk-imap.ts",
     "desk-ntfy": "bin/desk-ntfy.ts",
-    "desk-mail-dmarc": "bin/desk-mail-dmarc.ts",
+    "desk-mail-move": "bin/desk-mail-move.ts",
+    "desk-mail-trash": "bin/desk-mail-trash.ts",
+    "desk-mail-draft": "bin/desk-mail-draft.ts",
     "desk-mail-report": "bin/desk-mail-report.ts",
     "desk-mail-invite": "bin/desk-mail-invite.ts",
     "desk-mail-send": "bin/desk-mail-send.ts",
-    "desk-exchange-decline": "bin/desk-exchange-decline.ts",
-    "desk-codex-json": "bin/desk-codex-json.ts"
+    "desk-mail-dmarc": "bin/desk-mail-dmarc.ts",
+    "desk-parse": "bin/desk-parse.ts",
+    "desk-calendar-create": "bin/desk-calendar-create.ts"
   },
   "scripts": {
     "test": "bun test",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit && bunx tsc --noEmit -p personal"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",
@@ -37,7 +28,9 @@
   },
   "dependencies": {
     "imapflow": "^1.1.1",
-    "pulse": "github:the-metafactory/pulse#v0.31.1",
     "zod": "4.3.6"
-  }
+  },
+  "workspaces": [
+    "personal"
+  ]
 }

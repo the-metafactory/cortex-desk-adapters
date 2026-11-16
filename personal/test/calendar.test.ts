@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { eventPeople, MAX_EVENT_ATTENDEES } from "../src/attendees";
+import { eventPeople, MAX_EVENT_ATTENDEES } from "../../src/attendees";
 import { dedupe, fromExchange, fromMac, localIso, type MacEvent } from "../src/calendar";
 
 it("sends an Exchange meeting's organizer and attendee addresses in lowercase, and drops names and legacy DNs", () => {

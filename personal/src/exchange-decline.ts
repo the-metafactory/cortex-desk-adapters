@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DeskDeclinedCopyRequest, DeskWriteResult } from "./contract";
-import { isRecord } from "./guards";
-import { lastLine, type Runner } from "./run";
-import { Refusal } from "./writers";
+import type { DeskDeclinedCopyRequest, DeskWriteResult } from "../../src/contract";
+import { isRecord } from "../../src/guards";
+import { lastLine, type Runner } from "../../src/run";
+import { Refusal } from "../../src/writers";
 
 export type Ews = (body: string) => Promise<string>;
 

@@ -1,5 +1,5 @@
 import type { DeskMailInvitation, DeskSourceMail } from "./contract";
-import { appleMailUrl } from "./mail";
+import { appleMailUrl } from "./apple-mail-url";
 import { bareMessageId } from "./move";
 import { address, type SentEnvelope } from "./sent";
 

@@ -25,6 +25,6 @@ jobs:
           bash mac/build-availability.sh "$RUNNER_TEMP/mac"
           bash mac/build-reminders.sh
       - name: Type check
-        run: bunx tsc --noEmit
+        run: bun run typecheck
       - name: Test
         run: bun test

@@ -1,7 +1,7 @@
 import { expect, it } from "bun:test";
-import type { Runner } from "../src/run";
+import type { Runner } from "../../src/run";
 import { closeComment, closeMarker, closeTask, parseRef, readCloseRequest } from "../src/task-close";
-import { Refusal } from "../src/writers";
+import { Refusal } from "../../src/writers";
 
 type Answer = { code?: number; stdout?: string; stderr?: string };
 
