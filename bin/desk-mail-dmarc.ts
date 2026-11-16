@@ -16,7 +16,7 @@ const { values } = parseArgs({ options: { config: { type: "string" }, mailbox: {
 
 try {
   const req = readDmarcRequest(await new Response(Bun.stdin.stream()).text());
-  const report = await withReportMailbox(req.account, (box) => dmarcReport(req, box), values.mailbox, values.config);
+  const report = await withReportMailbox(req.account, (box) => dmarcReport(req, box), { mailbox: values.mailbox, configPath: values.config });
   process.stdout.write(`${JSON.stringify(report)}\n`);
   process.exit(0);
 } catch (error) {

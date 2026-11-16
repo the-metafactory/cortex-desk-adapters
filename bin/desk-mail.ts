@@ -80,15 +80,15 @@ for (const account of values.account ?? []) {
   };
   const self = await accountAddresses(account).catch(() => []);
   const now = Date.now();
-  const linksRead = readLinks(account, unread.map((m) => m.uid), warn).catch(orEmpty<DeskMailLink[]>("links"));
-  const invitationsRead = readInvitations(account, listed.map((m) => m.uid), self, warn).catch(orEmpty<DeskMailInvitation>("invitations"));
+  const linksRead = readLinks(account, unread.map((m) => m.uid), { warn }).catch(orEmpty<DeskMailLink[]>("links"));
+  const invitationsRead = readInvitations(account, listed.map((m) => m.uid), self, { warn }).catch(orEmpty<DeskMailInvitation>("invitations"));
   const lookback = await readLookback(account, { since: new Date(now - lookbackDays * DAY_MS), scan: inviteScan, skip: new Set(listed.map((m) => m.uid)), self, warn }).catch((err: unknown) => {
     warn(`older invitations and invitation replies were not read: ${errorText(err)}`);
     return { replies: new Map<string, number>(), candidates: [] as LookbackCandidate[] };
   });
   const older = lookbackItems(lookback.candidates, { account, listed: new Set(listed.map((m) => bareMessageId(m.messageId))), replies: lookback.replies, now, limit: inviteLimit });
   const [headers, links, invitations] = await Promise.all([
-    readHeaders(account, [...listed.map((m) => m.uid), ...older.map((o) => o.uid)], values.authserv).catch(orEmpty<DeskMailHeaders>("headers")),
+    readHeaders(account, [...listed.map((m) => m.uid), ...older.map((o) => o.uid)], { trustedAuthserv: values.authserv }).catch(orEmpty<DeskMailHeaders>("headers")),
     linksRead,
     invitationsRead,
   ]);

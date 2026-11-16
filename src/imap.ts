@@ -65,8 +65,17 @@ async function withImapClient<T>(account: string, work: (client: ImapFlow) => Pr
 /** Connects to one account from the selected mail config, runs `work` on its mailbox, and always logs out. */
 export const withMailbox = <T>(account: string, work: (box: Mailbox) => Promise<T>, configPath?: string): Promise<T> => withImapClient(account, (client) => work(imapMailbox(client)), configPath);
 
+export interface MailboxOptions {
+  mailbox?: string;
+  configPath?: string;
+}
+
+export interface HeadersOptions extends MailboxOptions {
+  trustedAuthserv?: readonly string[];
+}
+
 /** Reads the Desk's header fields for these INBOX UIDs, read-only (BODY.PEEK), so no message is marked read. */
-export async function readHeaders(account: string, uids: number[], trustedAuthserv: readonly string[] = [], mailbox = "INBOX", configPath?: string): Promise<Map<number, DeskMailHeaders>> {
+export async function readHeaders(account: string, uids: number[], { trustedAuthserv = [], mailbox = "INBOX", configPath }: HeadersOptions = {}): Promise<Map<number, DeskMailHeaders>> {
   const out = new Map<number, DeskMailHeaders>();
   if (uids.length === 0) return out;
   return withImapClient(account, async (client) => {
@@ -107,7 +116,7 @@ export const attachmentsOf = (structure: Part | undefined): (Attachment & { part
  * A read-only ReportMailbox over one account's INBOX: the mailbox is opened with EXAMINE and parts are fetched with
  * BODY.PEEK, so the mail is never marked read. It refuses a Message-ID that matches no message or more than one.
  */
-export async function withReportMailbox<T>(account: string, work: (box: ReportMailbox) => Promise<T>, mailbox = "INBOX", configPath?: string): Promise<T> {
+export async function withReportMailbox<T>(account: string, work: (box: ReportMailbox) => Promise<T>, { mailbox = "INBOX", configPath }: MailboxOptions = {}): Promise<T> {
   return withImapClient(account, async (client) => {
     const lock = await client.getMailboxLock(mailbox, { readOnly: true });
     try {
@@ -148,8 +157,13 @@ const htmlPart = (structure: Part | undefined): string | undefined => {
   return html ? html.part ?? "1" : undefined;
 };
 
+export interface LinksOptions extends MailboxOptions {
+  warn?: (line: string) => void;
+  maxBytes?: number;
+}
+
 /** The links of each message's HTML body, for these INBOX UIDs, read-only (EXAMINE, BODY.PEEK), so no message is marked read. */
-export async function readLinks(account: string, uids: number[], warn: (line: string) => void = () => undefined, mailbox = "INBOX", maxBytes = 256 * 1024, configPath?: string): Promise<Map<number, DeskMailLink[]>> {
+export async function readLinks(account: string, uids: number[], { warn = () => undefined, mailbox = "INBOX", maxBytes = 256 * 1024, configPath }: LinksOptions = {}): Promise<Map<number, DeskMailLink[]>> {
   const out = new Map<number, DeskMailLink[]>();
   if (uids.length === 0) return out;
   return withImapClient(account, async (client) => {
@@ -341,8 +355,12 @@ async function downloadText(client: ImapFlow, uid: number, part: string, maxByte
   return Buffer.concat(chunks).toString("utf8");
 }
 
+export interface InvitationOptions extends MailboxOptions {
+  warn?: (line: string) => void;
+}
+
 /** The calendar invitations of these INBOX UIDs, read-only (EXAMINE, BODY.PEEK), so no message is marked read. */
-export async function readInvitations(account: string, uids: number[], self: readonly string[], warn: (line: string) => void = () => undefined, mailbox = "INBOX", configPath?: string): Promise<Map<number, DeskMailInvitation>> {
+export async function readInvitations(account: string, uids: number[], self: readonly string[], { warn = () => undefined, mailbox = "INBOX", configPath }: InvitationOptions = {}): Promise<Map<number, DeskMailInvitation>> {
   const out = new Map<number, DeskMailInvitation>();
   if (uids.length === 0) return out;
   return withImapClient(account, async (client) => {
