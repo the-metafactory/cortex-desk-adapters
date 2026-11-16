@@ -1,5 +1,5 @@
 import type { DeskMailAddress, DeskSentReply, DeskSourceSentMail } from "./contract";
-import { appleMailUrl } from "./mail";
+import { appleMailUrl } from "./apple-mail-url";
 import { bareMessageId } from "./move";
 
 export const SENT_NAMES = ["Sent", "Sent Items", "Sent Messages", "Sent Mail", "Gesendete Elemente", "Gesendete Objekte", "Gesendet", "Éléments envoyés"] as const;

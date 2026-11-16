@@ -15,6 +15,12 @@ For examples that work without the personal toolkit, see [Portable Desk adapters
 
 Both wrap CLIs from a personal toolkit. They are examples of the contract as much as tools: copy one and point it at your own calendar or mail tool.
 
+## Two packages
+
+The root package, `cortex-desk-adapters`, holds the portable commands: `desk-ics`, `desk-imap`, `desk-ntfy`, `desk-mail-move`, `desk-mail-trash`, `desk-mail-draft`, `desk-mail-report`, `desk-mail-invite`, `desk-mail-send`, `desk-mail-dmarc`, `desk-parse` and `desk-calendar-create`, with the `mac/` binaries. The Bun workspace package in [`personal/`](personal), `cortex-desk-adapters-personal`, holds the commands that wrap the personal toolkit: `desk-calendar`, `desk-mail`, `desk-task`, `desk-task-close`, `desk-goal`, `desk-note-tana`, `desk-exchange-decline`, `desk-classify-mail` and `desk-codex-json`, with `personal-actions/` and `flows/`.
+
+The old paths `bin/<personal command>.ts` still run those commands. They are one-line re-exports into `personal/bin/` and stay for one release; point your stack config at `personal/bin/` meanwhile. `bun scripts/check-portable.ts` (also run by `bun test`) fails when a module reachable from a root `bin` entry imports from `personal/`.
+
 ## The contract
 
 A source prints `{ "events"?: [...], "items"?: [...] }` on stdout and exits 0. The types are in [`src/contract.ts`](src/contract.ts).
@@ -283,14 +289,14 @@ Cortex can sort unread mail with a command set as `mc.desk.mail.classifier.comma
 
 The command prints one answer: `{ "category": "action" | "reply" | "meeting" | "fyi" | "bulk", "commitment"?: "request" | "invitation" | "none" | "unknown", "meetingKey"?, "reason", "summary"?, "suggestedAction"?, "evidence"? }`. `commitment` is independent of ranking: a request asks the person to take on a new task or responsibility; an invitation asks them to participate. An expected reply or an update to an existing meeting alone is not a new commitment. Missing or unknown commitment evidence does not show the Yes-filter. `meetingKey` must be one of the request's keys; `reason` is at most 200 characters, `summary` at most 600; `suggestedAction` is `reply`, `archive`, `link-meeting`, `task` or `none`; `evidence` holds at most 5 `{ "kind": "mail" | "event" | "note", "ref", "title" }`. Any other answer, or a non-zero exit, makes the Desk sort that mail by its own rules and try again later. A key configured as `apiKeyFile` or `apiKeyEnv` reaches the command as `DESK_CLASSIFIER_KEY` in its environment.
 
-`desk-classify-mail` is that command. It hosts the Pulse flow [`flows/desk-mail-triage.yaml`](flows/desk-mail-triage.yaml) on one OpenAI-compatible model:
+`desk-classify-mail` is that command. It hosts the Pulse flow [`personal/flows/desk-mail-triage.yaml`](personal/flows/desk-mail-triage.yaml) on one OpenAI-compatible model:
 
 1. `A_DESK_TRIAGE_PREPARE` answers `bulk` for a sender on the unimportant list (unless also a VIP) without calling the model.
 2. A `research:` step lets the model call `A_MAIL_SEARCH`, `A_MAIL_READ`, `A_CALENDAR_EVENTS` and `A_NOTES_SEARCH` (the read actions from pulse-actions) for up to 6 rounds within 60 s, with the corrections in the prompt as examples. Zero tool calls is fine for obvious mail.
 3. `A_DESK_TRIAGE_CHECK` checks the answer against the rules above and fails on anything else, including unknown fields.
 
 ```sh
-desk-classify-mail --flow <path>/flows/desk-mail-triage.yaml --base-url <url up to /v1> --model <name> \
+desk-classify-mail --flow <path>/personal/flows/desk-mail-triage.yaml --base-url <url up to /v1> --model <name> \
   [--key-env DESK_CLASSIFIER_KEY] [--ca-file <pem>] [--actions-dir <dir>]... [--mail-accounts work,personal] [--state-dir <dir>] [--timeout-ms <1000..300000>]
 ```
 
@@ -304,14 +310,14 @@ mc:
   desk:
     mail:
       classifier:
-        command: [/path/to/cortex-desk-adapters/bin/desk-classify-mail.ts, --flow, /path/to/cortex-desk-adapters/flows/desk-mail-triage.yaml,
+        command: [/path/to/cortex-desk-adapters/bin/desk-classify-mail.ts, --flow, /path/to/cortex-desk-adapters/personal/flows/desk-mail-triage.yaml,
                   --base-url, https://gateway.example/v1, --model, coder, --mail-accounts, work]
         apiKeyFile: ~/.config/gateway/key
         timeoutSeconds: 75
         maxPerPass: 10
 ```
 
-For the Mini, use `flows/desk-mail-triage-mini.yaml` with `--timeout-ms 150000` and Cortex `timeoutSeconds: 180`. This profile changes only the research deadline to 150 seconds. The CLI ends within 153 seconds, with 3 seconds beyond the research ceiling; Cortex allows another 27 seconds. This requires a Cortex version that accepts a 180-second classifier timeout. Tools, rounds, prompts and answer validation match the default flow. Start with `maxPerPass: 1` while qualifying a shared local model, and check other model clients before increasing the batch. Historical search results can contain stale UID/mailbox references after mail moves or deletion; a longer deadline does not repair that index.
+For the Mini, use `personal/flows/desk-mail-triage-mini.yaml` with `--timeout-ms 150000` and Cortex `timeoutSeconds: 180`. This profile changes only the research deadline to 150 seconds. The CLI ends within 153 seconds, with 3 seconds beyond the research ceiling; Cortex allows another 27 seconds. This requires a Cortex version that accepts a 180-second classifier timeout. Tools, rounds, prompts and answer validation match the default flow. Start with `maxPerPass: 1` while qualifying a shared local model, and check other model clients before increasing the batch. Historical search results can contain stale UID/mailbox references after mail moves or deletion; a longer deadline does not repair that index.
 
 ## Develop
 

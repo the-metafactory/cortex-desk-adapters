@@ -6,6 +6,28 @@
       "name": "desk-adapters",
       "dependencies": {
         "imapflow": "^1.1.1",
+        "zod": "4.3.6",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.4.4",
+        "typescript": "^7.0.2",
+      },
+    },
+    "personal": {
+      "name": "cortex-desk-adapters-personal",
+      "version": "0.1.0",
+      "bin": {
+        "desk-calendar": "bin/desk-calendar.ts",
+        "desk-mail": "bin/desk-mail.ts",
+        "desk-task": "bin/desk-task.ts",
+        "desk-task-close": "bin/desk-task-close.ts",
+        "desk-goal": "bin/desk-goal.ts",
+        "desk-note-tana": "bin/desk-note-tana.ts",
+        "desk-exchange-decline": "bin/desk-exchange-decline.ts",
+        "desk-classify-mail": "bin/desk-classify-mail.ts",
+        "desk-codex-json": "bin/desk-codex-json.ts",
+      },
+      "dependencies": {
         "pulse": "github:the-metafactory/pulse#v0.31.1",
         "zod": "4.3.6",
       },
@@ -91,6 +113,8 @@
     "bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
 
     "commander": ["commander@12.1.0", "", {}, "sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA=="],
+
+    "cortex-desk-adapters-personal": ["cortex-desk-adapters-personal@workspace:personal"],
 
     "encoding-japanese": ["encoding-japanese@2.3.0", "", {}, "sha512-eQyh1vzHz13DUkZcJO+0IOAoKXRQwKV5IBffeuYsWZyRLGiSzfzXObCqWvqFXdX0UU8qOk+lBXbkUhMCpdJe4Q=="],
 

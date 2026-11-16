@@ -1,5 +1,5 @@
-import { eventPeople } from "./attendees";
-import type { DeskSourceEvent } from "./contract";
+import { eventPeople } from "../../src/attendees";
+import type { DeskSourceEvent } from "../../src/contract";
 
 /** One event from `ical exchange list --compact --format json`. */
 export interface ExchangeEvent {

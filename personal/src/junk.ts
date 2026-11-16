@@ -1,6 +1,6 @@
-import type { DeskSourceMail } from "./contract";
-import { toDeskMail, type EmailListEntry } from "./mail";
-import { pickFolder, type Folder } from "./move";
+import type { DeskSourceMail } from "../../src/contract";
+import { toDeskMail, type EmailListEntry } from "../../src/mail";
+import { pickFolder, type Folder } from "../../src/move";
 
 export const JUNK_DAYS = 7;
 export const JUNK_LIMIT = 20;

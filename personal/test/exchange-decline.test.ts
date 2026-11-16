@@ -3,8 +3,8 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeKeychainPassword, type Ews, ewsTransport, icalAccount, readDeclinedCopyRequest, removeDeclinedCopy } from "../src/exchange-decline";
-import type { Runner } from "../src/run";
-import { Refusal } from "../src/writers";
+import type { Runner } from "../../src/run";
+import { Refusal } from "../../src/writers";
 
 interface Item {
   id: string;

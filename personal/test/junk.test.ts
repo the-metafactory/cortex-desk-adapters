@@ -1,6 +1,6 @@
 import { expect, it } from "bun:test";
 import { readJunk } from "../src/junk";
-import type { Folder } from "../src/move";
+import type { Folder } from "../../src/move";
 
 const FOLDERS: Folder[] = [
   { path: "INBOX", name: "INBOX", specialUse: "\\Inbox" },

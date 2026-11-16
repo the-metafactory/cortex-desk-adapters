@@ -2,7 +2,7 @@ import { mkdtemp, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { isRecord } from "./guards";
+import { isRecord } from "../../src/guards";
 import type { TriageRequest } from "./triage";
 
 const Snapshot = z.object({

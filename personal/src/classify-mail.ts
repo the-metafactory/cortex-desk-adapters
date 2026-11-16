@@ -1,7 +1,7 @@
 import { chmod, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pulse, type ChatModel, type FlowRunner, type ResearchEvent } from "./pulse";
-import { isRecord } from "./guards";
+import { isRecord } from "../../src/guards";
 import { validateTriage, type TriageAnswer, type TriageRequest } from "./triage";
 
 export interface ClassifyOptions {

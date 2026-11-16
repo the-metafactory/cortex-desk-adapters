@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createdNodeId, DEDUPE_DAYS, ledgerPath, notePayload, noteText, supertagConfigPath, tanaAccess, targetNode, writeNote, type Fetch, type TanaAccess } from "../src/tana";
-import { Refusal } from "../src/writers";
+import { Refusal } from "../../src/writers";
 
 let dir = "";
 beforeEach(() => {

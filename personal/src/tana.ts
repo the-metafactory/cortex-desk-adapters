@@ -1,11 +1,11 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEDUPE_DAYS, readJson, readLedger, writeLedger } from "./ledger";
+import { DEDUPE_DAYS, readJson, readLedger, writeLedger } from "../../src/ledger";
 
-export { DEDUPE_DAYS } from "./ledger";
-import type { DeskWriteResult } from "./contract";
-import { isRecord } from "./guards";
-import { Refusal } from "./writers";
+export { DEDUPE_DAYS } from "../../src/ledger";
+import type { DeskWriteResult } from "../../src/contract";
+import { isRecord } from "../../src/guards";
+import { Refusal } from "../../src/writers";
 
 export const TANA_ENDPOINT = "https://europe-west1-tagr-prod.cloudfunctions.net/addToNodeV2";
 export const NOTE_MAX = 1000;
