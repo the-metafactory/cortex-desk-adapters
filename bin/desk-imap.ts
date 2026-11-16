@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { ImapFlow } from "imapflow";
 import { Refusal } from "../src/writers";
 import { resolveImapSource, UsageError } from "../src/imap-mail";
-import { errorText, imapReadBox, readItems } from "../src/imap";
+import { errorText, imapReadBox, readItems, readSentItems } from "../src/imap";
 import { LOOKBACK } from "../src/invitation-lookback";
 import { accountAddresses } from "../src/smtp";
 import type { DeskSourceOutput } from "../src/contract";
@@ -23,6 +23,9 @@ const { values } = parseArgs({
     "invite-days": { type: "string", default: String(LOOKBACK.days) },
     "invite-scan": { type: "string", default: String(LOOKBACK.scan) },
     "invite-limit": { type: "string", default: String(LOOKBACK.limit) },
+    sent: { type: "boolean", default: false },
+    "sent-days": { type: "string", default: "14" },
+    "sent-limit": { type: "string", default: "40" },
   },
 });
 
@@ -41,6 +44,8 @@ const limit = whole(values.limit, "limit", 200);
 const inviteDays = whole(values["invite-days"], "invite-days", LOOKBACK.maxDays);
 const inviteScan = whole(values["invite-scan"], "invite-scan", LOOKBACK.maxScan);
 const inviteLimit = whole(values["invite-limit"], "invite-limit", LOOKBACK.maxLimit);
+const sentDays = values.sent ? whole(values["sent-days"], "sent-days", 90) : 0;
+const sentLimit = values.sent ? whole(values["sent-limit"], "sent-limit", 200) : 0;
 
 const source = await resolveImapSource(values).catch((err: unknown) => {
   if (err instanceof UsageError) {
@@ -76,8 +81,14 @@ try {
     invite: { days: inviteDays, scan: inviteScan, limit: inviteLimit },
     warn,
   });
+  const sent = values.sent
+    ? await readSentItems(imapReadBox(client), { account: source.account, days: sentDays, limit: sentLimit, warn }).catch((err: unknown) => {
+        warn(`sent mail was not read: ${errorText(err)}`);
+        return [];
+      })
+    : [];
   await client.logout();
-  const output: DeskSourceOutput = { capabilities: ["attention"], items };
+  const output: DeskSourceOutput = { capabilities: ["attention"], items: [...items, ...sent] };
   process.stdout.write(JSON.stringify(output));
 } catch (err) {
   fail(`desk-imap: ${errorText(err)}`);

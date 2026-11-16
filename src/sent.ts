@@ -135,3 +135,10 @@ export function withReplies(sent: DeskSourceSentMail, candidates: readonly Reply
   const replies = repliesTo(sent, candidates);
   return replies.length > 0 ? { ...sent, replies } : sent;
 }
+
+/** The newest sent mails by Message-ID, newest first: one found in two Sent folders is listed once, at most `limit`. */
+export function newestSent<T extends { item: Pick<DeskSourceSentMail, "id" | "sentAt"> }>(listed: readonly T[], limit: number): T[] {
+  const byId = new Map<string, T>();
+  for (const l of listed) if (!byId.has(l.item.id)) byId.set(l.item.id, l);
+  return [...byId.values()].sort((a, b) => Date.parse(b.item.sentAt) - Date.parse(a.item.sentAt)).slice(0, limit);
+}

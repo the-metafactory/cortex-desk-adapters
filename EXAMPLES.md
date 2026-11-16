@@ -39,6 +39,8 @@ Set `DESK_IMAP_PASSWORD` in the adapter's environment before running the command
 
 The invitation needs the account's own addresses. With `--config` they come from the account's `from` address and its login names; with the flag route the `--user` login is used when it is an address.
 
+With `--sent`, `desk-imap` also lists the account's sent mail of the last `--sent-days` days (default 14, at most 90), newest `--sent-limit` (default 40), as the same `sent` items `desk-mail --sent` prints: each carries its `references` and the replies found in INBOX and the archive. Sent mail is read with EXAMINE and `BODY.PEEK`, so nothing is marked read. When the sent mail cannot be read, the inbox is listed alone and one line goes to stderr. Without `--sent`, the output carries no `sent` item.
+
 | Flag | Default | Meaning |
 |---|---|---|
 | `--host` | required | IMAP host |
@@ -48,6 +50,9 @@ The invitation needs the account's own addresses. With `--config` they come from
 | `--mailbox` | `INBOX` | Mailbox to read |
 | `--account` | `mail` | Label carried on each item |
 | `--limit` | `30` | Maximum messages, from 1 to 200 |
+| `--sent` | off | Also list the account's sent mail with its replies |
+| `--sent-days` | `14` | Sent mail look-back, from 1 to 90 days |
+| `--sent-limit` | `40` | Maximum sent messages, from 1 to 200 |
 | `--password-env` | `DESK_IMAP_PASSWORD` | Password environment variable |
 | `--invite-days` | `14` | Invitation look-back, from 1 to 60 days |
 | `--invite-scan` | `200` | Newest messages scanned for invitations, from 1 to 1000 |
