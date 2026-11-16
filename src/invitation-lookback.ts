@@ -1,4 +1,5 @@
 import type { DeskMailInvitation, DeskSourceMail } from "./cortex-contract";
+import { invitationOpen as sdkInvitationOpen } from "@the-metafactory/cortex/desk-sdk";
 import { appleMailUrl } from "./apple-mail-url";
 import { bareMessageId } from "./move";
 import { address, type SentEnvelope } from "./sent";
@@ -17,18 +18,8 @@ export function addReply(replies: Map<string, number>, reply: { uid: string; seq
   if (known === undefined || reply.sequence > known) replies.set(reply.uid, reply.sequence);
 }
 
-/** A reply in Sent answers the invitation when it is for the same UID and at least as new a SEQUENCE. */
-export const answeredInSent = (inv: DeskMailInvitation, replies: Replies): boolean => (replies.get(inv.uid) ?? -1) >= inv.sequence;
-
-/** The event is over at its end (its start without an end). A recurring invitation is never over: later meetings may follow. */
-export function invitationOver(inv: DeskMailInvitation, now: number): boolean {
-  if (inv.recurring) return false;
-  const end = Date.parse(inv.end ?? inv.start);
-  return Number.isFinite(end) && end <= now;
-}
-
-/** The invitation still waits for the principal: not answered in Sent and not over. Being read does not answer it. */
-export const invitationOpen = (inv: DeskMailInvitation, replies: Replies, now: number): boolean => !answeredInSent(inv, replies) && !invitationOver(inv, now);
+/** The invitation still waits for the principal: Cortex's rule, applied to the highest SEQUENCE answered in Sent. */
+export const invitationOpen = (inv: DeskMailInvitation, replies: Replies, now: number): boolean => sdkInvitationOpen(inv, replies.get(inv.uid), now);
 
 export interface LookbackCandidate {
   uid: number;
