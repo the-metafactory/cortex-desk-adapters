@@ -1,6 +1,6 @@
 {
   "name": "cortex-desk-adapters",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "type": "module",
   "description": "Portable source adapters, writers and a parser for the Cortex Desk: commands that print or create Desk JSON. The commands that wrap the personal toolkit live in personal/.",
