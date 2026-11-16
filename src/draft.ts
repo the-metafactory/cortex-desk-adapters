@@ -1,5 +1,6 @@
 import type { DeskMailDraftRequest, DeskWriteResult } from "./contract";
 import { isRecord } from "./guards";
+import { folderByUse, type Folder } from "./move";
 import { lastLine, type Runner } from "./run";
 import { Refusal } from "./writers";
 
@@ -70,4 +71,49 @@ export async function saveDraft(req: DeskMailDraftRequest, run: Runner, emailBin
   const id = typeof out.messageId === "string" ? bare(out.messageId) : "";
   const mailbox = typeof out.mailbox === "string" && out.mailbox ? out.mailbox : "Drafts";
   return { id, message: `Draft saved in ${req.account} ${mailbox}.` };
+}
+
+const DRAFT_NAMES = ["Drafts", "Draft", "Entwürfe", "Brouillons"];
+
+/** The few IMAP calls the draft makes, so tests never reach a mail server. */
+export interface DraftBox {
+  folders(): Promise<Folder[]>;
+  append(folder: string, content: Uint8Array, flags: string[]): Promise<void>;
+}
+
+export interface DraftOptions {
+  from: string;
+  now?: () => Date;
+  newId?: () => string;
+}
+
+const encodeWord = (text: string): string => (/^[\x20-\x7e]*$/.test(text) ? text : `=?UTF-8?B?${Buffer.from(text, "utf8").toString("base64")}?=`);
+
+const wrap64 = (text: string): string => text.replace(/.{1,76}/g, "$&\r\n");
+
+/** The reply as one RFC 5322 message: plain UTF-8 text, threaded to the original with In-Reply-To and References. */
+export function replyMessage(req: DeskMailDraftRequest, o: { from: string; date: Date; draftId: string }): string {
+  const headers = [
+    `From: ${o.from}`,
+    `To: ${req.to}`,
+    `Subject: ${encodeWord(req.subject)}`,
+    `Date: ${o.date.toUTCString().replace("GMT", "+0000")}`,
+    `Message-ID: <${o.draftId}>`,
+    `In-Reply-To: <${req.messageId}>`,
+    `References: <${req.messageId}>`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=UTF-8",
+    "Content-Transfer-Encoding: base64",
+  ];
+  return `${headers.join("\r\n")}\r\n\r\n${wrap64(Buffer.from(req.body.replace(/\r?\n/g, "\r\n"), "utf8").toString("base64"))}`;
+}
+
+/** Appends the reply to the account's Drafts over IMAP with \Draft. It never sends and touches no other message. */
+export async function saveDraftImap(req: DeskMailDraftRequest, box: DraftBox, opts: DraftOptions): Promise<DeskWriteResult> {
+  const drafts = folderByUse(await box.folders(), "\\Drafts", DRAFT_NAMES);
+  if (!drafts) throw new Refusal(`The ${req.account} account has no Drafts mailbox, so no draft was saved.`);
+  const draftId = `desk-draft-${opts.newId?.() ?? crypto.randomUUID()}@desk.invalid`;
+  const content = replyMessage(req, { from: opts.from, date: (opts.now ?? (() => new Date()))(), draftId });
+  await box.append(drafts, Buffer.from(content), ["\\Draft"]);
+  return { id: draftId, message: `Draft saved in ${req.account} ${drafts}.` };
 }

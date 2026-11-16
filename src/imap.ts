@@ -12,6 +12,9 @@ import { ReportRefusal, type Attachment, type ReportMailbox } from "./dmarc";
 import { bareMessageId, folderByUse, type Mailbox } from "./move";
 import { firstParagraph, textPart, toDeskMail, type StructureNode } from "./imap-mail";
 import { ARCHIVE_NAMES, replyCandidate, sentFolders, sentText, toSentMail, withReplies, type ReplyCandidate, type SentEnvelope } from "./sent";
+import { isRecord } from "./guards";
+import { mailAccountRecord } from "./mail-config";
+import type { DraftBox } from "./draft";
 import { spawnRunner } from "./run";
 import { Refusal } from "./writers";
 
@@ -609,4 +612,18 @@ export async function readItems(box: ReadBox, input: ItemsInput): Promise<DeskSo
     items.push({ ...o.mail, ...(h ? { headers: h } : {}) });
   }
   return items;
+}
+
+const fromAddress = async (account: string, user: string, configPath?: string): Promise<string> => {
+  const record = await mailAccountRecord(account, configPath);
+  const from = isRecord(record.from) && typeof record.from.email === "string" ? record.from.email.trim() : user;
+  if (!/^[^\s<>,@"]+@[^\s<>,@"]+$/.test(from)) throw new Refusal(`The ${account} account has no From address.`);
+  return from;
+};
+
+/** Runs `work` on a DraftBox for one account, with the account's From address. The draft is appended with its folder selected read-write so \Draft is kept. */
+export async function withDraftBox<T>(account: string, work: (box: DraftBox, from: string) => Promise<T>, configPath?: string): Promise<T> {
+  const acct = await imapAccount(account, spawnRunner, configPath);
+  const from = await fromAddress(account, acct.user, configPath);
+  return withImapClient(account, (client) => work(phishingReportBox(client, account), from), configPath);
 }

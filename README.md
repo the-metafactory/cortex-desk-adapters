@@ -193,6 +193,8 @@ With `mc.desk.mail.actions.draft` set, a mail item offers "Draft a reply" (as it
 
 `desk-mail-draft [--email /path/to/email]` is that command for the `email` CLI: it runs `email draft create` with the account, recipient, subject and `In-Reply-To`, as plain text, with the reply on stdin. The `email` CLI appends the message to the account's Drafts mailbox over IMAP. It refuses a recipient that is not one plain address, a subject with a line break, and an empty reply.
 
+`desk-mail-draft --config <path>` needs no `email` CLI: it reads the account from that mail account file and appends the draft over IMAP to the account's Drafts mailbox (special-use `\Drafts`, else a usual name) with the `\Draft` flag. From is the account's `from` address, with `In-Reply-To` and `References` naming the original and a UTF-8 plain-text body. It prints the new message's Message-ID, refuses in one sentence when the account has no Drafts mailbox, and never sends mail or touches another message.
+
 ### Reporting phishing
 
 With `mc.desk.mail.report` set, a mail the Desk flags as suspicious offers "Report". Cortex runs `mc.desk.mail.report.command` without a shell and writes `{ "action": "report", "account", "messageId", "to" }` (`DeskMailReportRequest`) to its stdin, with `to` from `mc.desk.mail.report.to`. Without the block, Report is hidden; Spam works either way.
