@@ -53,10 +53,12 @@ const INBOX: Fixture[] = [
 ];
 const SENT: Fixture[] = [{ uid: 1, messageId: "<reply@example.com>", subject: "Accepted", from: "pat@example.com", date: new Date(NOW - 3_600_000), seen: true, type: "calendar", body: ics("answered-1", "REPLY", "20261106T100000Z", ["SEQUENCE:0"]) }];
 
+const PROJECTS: Fixture[] = [{ uid: 15, messageId: "<project@example.org>", subject: "Project note", from: "sam@example.org", date: new Date(NOW - 3_600_000), seen: false, type: "text/plain", body: "Hello,\n\nA note." }];
+
 const part = (f: Fixture) => ({ part: "1", type: f.type === "calendar" ? "text/calendar" : f.type });
 
 function fixtureBox(): { box: ReadBox; reads: string[] } {
-  const folders: Record<string, Fixture[]> = { INBOX, Sent: SENT };
+  const folders: Record<string, Fixture[]> = { INBOX, Sent: SENT, Projects: PROJECTS };
   const reads: string[] = [];
   let open = "";
   const current = (): Fixture[] => folders[open] ?? [];
@@ -162,5 +164,16 @@ describe("desk-imap prints what desk-mail prints", () => {
     expect(items.get("invite@example.org")?.invitation).toBeUndefined();
     expect(items.has("invite@example.org")).toBe(true);
     expect(lines.some((l) => l.includes("message 12"))).toBe(true);
+  });
+
+  test("an HTML-only message is downloaded once for its paragraph and its links", async () => {
+    const { box, reads } = fixtureBox();
+    await viaImap(box);
+    expect(reads.filter((r) => r === "INBOX:11")).toHaveLength(1);
+  });
+
+  test("listing another mailbox does not hide an INBOX invitation with the same UID", async () => {
+    const items = await readItems(fixtureBox().box, { account: "work", mailbox: "Projects", limit: 30, self: SELF, invite: { days: 14, scan: 200, limit: 10 }, now: NOW });
+    expect(derived(items).get("older-open@example.org")?.invitation?.uid).toBe("older-1");
   });
 });

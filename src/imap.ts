@@ -215,14 +215,14 @@ export interface LinksOptions extends MailboxOptions {
 }
 
 /** The links of each message's HTML body, for these UIDs of the open folder, read with BODY.PEEK, so no message is marked read. */
-export async function linksIn(box: ReadBox, uids: number[], { warn = () => undefined, maxBytes = 256 * 1024 }: { warn?: (line: string) => void; maxBytes?: number } = {}): Promise<Map<number, DeskMailLink[]>> {
+export async function linksIn(box: ReadBox, uids: number[], { warn = () => undefined, maxBytes = 256 * 1024, htmlByUid }: { warn?: (line: string) => void; maxBytes?: number; htmlByUid?: ReadonlyMap<number, string> } = {}): Promise<Map<number, DeskMailLink[]>> {
   const out = new Map<number, DeskMailLink[]>();
   if (uids.length === 0) return out;
   for (const m of await box.fetch(uids, { bodyStructure: true })) {
     const part = htmlPart(m.bodyStructure as Part | undefined);
     if (!part) continue;
     try {
-      const links = linksOf(await box.text(m.uid, part, maxBytes));
+      const links = linksOf(htmlByUid?.get(m.uid) ?? await box.text(m.uid, part, maxBytes));
       if (links.length > 0) out.set(m.uid, links);
     } catch (err) {
       warn(`the links of message ${m.uid} were not read: ${errorText(err)}`);
@@ -536,12 +536,15 @@ export interface ItemsInput {
 const LIST_TEXT_BYTES = 16_384;
 const LIST_HTML_BYTES = 256 * 1024;
 
-async function paragraphOf(box: ReadBox, m: ReadMessage): Promise<string | undefined> {
+async function paragraphOf(box: ReadBox, m: ReadMessage, htmlByUid: Map<number, string>): Promise<string | undefined> {
   const structure = m.bodyStructure as StructureNode & Part | undefined;
   const plain = textPart(structure);
   if (plain) return firstParagraph(await box.text(m.uid, plain, LIST_TEXT_BYTES));
   const html = htmlPart(structure);
-  return html ? firstParagraphOfHtmlBody(await box.text(m.uid, html, LIST_HTML_BYTES), m.envelope?.subject) : undefined;
+  if (!html) return undefined;
+  const body = await box.text(m.uid, html, LIST_HTML_BYTES);
+  htmlByUid.set(m.uid, body);
+  return firstParagraphOfHtmlBody(body, m.envelope?.subject);
 }
 
 /**
@@ -562,8 +565,9 @@ export async function readItems(box: ReadBox, input: ItemsInput): Promise<DeskSo
     if (uids.length === 0) return null;
     const messages = await box.fetch(uids, { envelope: true, bodyStructure: true, internalDate: true, headers: HEADER_FIELDS });
     const paragraphs = new Map<number, string | undefined>();
-    for (const m of messages) paragraphs.set(m.uid, await paragraphOf(box, m).catch(() => undefined));
-    const links = await linksIn(box, uids, { warn }).catch(orEmpty<DeskMailLink[]>("links"));
+    const htmlByUid = new Map<number, string>();
+    for (const m of messages) paragraphs.set(m.uid, await paragraphOf(box, m, htmlByUid).catch(() => undefined));
+    const links = await linksIn(box, uids, { warn, htmlByUid }).catch(orEmpty<DeskMailLink[]>("links"));
     const invitations = await invitationsIn(box, uids, input.self, { warn }).catch(orEmpty<DeskMailInvitation>("invitations"));
     return { messages, paragraphs, links, invitations };
   });
@@ -571,7 +575,7 @@ export async function readItems(box: ReadBox, input: ItemsInput): Promise<DeskSo
   const lookback = await lookbackIn(box, {
     since: new Date(now - input.invite.days * DAY_MS),
     scan: input.invite.scan,
-    skip: new Set(messages.map((m) => m.uid)),
+    skip: input.mailbox.toUpperCase() === "INBOX" ? new Set(messages.map((m) => m.uid)) : new Set<number>(),
     self: input.self,
     warn,
   }).catch((err: unknown) => {
