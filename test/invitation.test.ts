@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { buildReply, calendarPart, durationMs, foldLine, parseInvitation, readInviteReplyRequest, replyMessage } from "../src/invitation";
 import { answerInvitation, type InviteReplyDeps } from "../src/invite-reply";
 import { curlConfig, sendMail, type SmtpAccount } from "../src/smtp";
-import type { DeskInviteReplyRequest } from "../src/contract";
+import type { DeskInviteReplyRequest } from "../src/cortex-contract";
 
 const REQUEST = [
   "BEGIN:VCALENDAR",

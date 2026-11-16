@@ -1,130 +1,6 @@
-/**
- * The Desk source contract (cortex#2772): a source is a command that prints one JSON object on stdout.
- * Cortex runs it from `mc.desk.sources`, validates this shape and drops what does not match.
- */
+import type { AskKind, DeskMoveTarget, DeskSourceEvent, DeskSourceMail, DeskSourceSentMail, DeskWriteRequest, ParserRequest } from "./cortex-contract";
 
-export interface DeskSourceEvent {
-  availability?: { status: "busy" | "free" | "unknown"; provenance: string };
-  calendarId?: string;
-  /** Stable within the source, e.g. the calendar's event id or date+title. */
-  id: string;
-  /** ISO 8601 start. For an all-day event, the day at 00:00 local time. */
-  start: string;
-  end?: string;
-  allDay?: boolean;
-  title: string;
-  location?: string;
-  online?: boolean;
-  /** A link that opens the event or joins the meeting. */
-  url?: string;
-  /** The calendar the event belongs to, e.g. for per-calendar colours. */
-  calendar?: string;
-  /**
-   * The meeting's organizer and attendees (cortex#3628), which the `mail.link-meeting` auto-link checks a sender against.
-   * Addresses only, lowercase, at most 500 attendees. Left out when the source has no address.
-   */
-  organizer?: { address: string };
-  attendees?: { address: string }[];
-}
-
-export interface DeskSourceMail {
-  kind: "mail";
-  /** The RFC 5322 Message-ID without angle brackets. */
-  id: string;
-  from: { name?: string; address: string };
-  subject: string;
-  /** ISO 8601. */
-  receivedAt: string;
-  unread: boolean;
-  firstParagraph?: string;
-  /** Opens the message in the principal's mail client, e.g. message://%3Cid%3E for Apple Mail. */
-  url?: string;
-  account?: string;
-  /** Headers later Desk steps read. Cortex treats every value as untrusted data. */
-  headers?: DeskMailHeaders;
-  /** Links in the HTML body whose text names a host (at most 20), for the Desk's phishing check. Untrusted data. */
-  links?: DeskMailLink[];
-  /** The calendar invitation (iTIP METHOD:REQUEST) the mail carries, read from its text/calendar part. Untrusted data. */
-  invitation?: DeskMailInvitation;
-}
-
-/** An attendee's participation status (RFC 5545 PARTSTAT for events). */
-export type DeskPartStat = "NEEDS-ACTION" | "ACCEPTED" | "DECLINED" | "TENTATIVE" | "DELEGATED";
-
-/** A meeting request read from a mail's text/calendar part. Times are ISO 8601 instants. */
-export interface DeskMailInvitation {
-  method: "REQUEST";
-  uid: string;
-  sequence: number;
-  summary: string;
-  start: string;
-  end?: string;
-  allDay?: boolean;
-  location?: string;
-  organizer: { address: string; name?: string };
-  /** The principal among the attendees, matched by the account's own addresses; absent when they are not listed. */
-  attendee?: { address: string; status: DeskPartStat; rsvp?: boolean };
-  recurring?: boolean;
-  /** How many attendees the request lists. */
-  attendees: number;
-}
-
-/** One link: the text a reader sees and the http(s) address it opens. */
-export interface DeskMailLink {
-  text: string;
-  href: string;
-}
-
-/** An SPF, DKIM or DMARC verdict from the topmost Authentication-Results header. */
-export type DeskAuthVerdict = "pass" | "fail" | "softfail" | "neutral" | "none" | "temperror" | "permerror" | "policy";
-
-export interface DeskMailHeaders {
-  listId?: string;
-  listUnsubscribe?: string;
-  listUnsubscribePost?: string;
-  /** `dkimDomains`: the signing domains of the passing DKIM signatures in the same header, possibly none; `spfDomain`: the domain SPF checked (smtp.mailfrom). */
-  authResults?: { spf?: DeskAuthVerdict; dkim?: DeskAuthVerdict; dmarc?: DeskAuthVerdict; dkimDomains?: string[]; spfDomain?: string };
-  replyTo?: string;
-  inReplyTo?: string;
-  /** The Message-IDs of the References header, without angle brackets, the closest ancestors last (at most 20). */
-  references?: string[];
-}
-
-export interface DeskMailAddress {
-  name?: string;
-  address: string;
-}
-
-/** A reply to a sent mail: a message in INBOX or the archive whose In-Reply-To or References names it, from someone other than the sender. */
-export interface DeskSentReply {
-  id: string;
-  from: DeskMailAddress;
-  /** ISO 8601. */
-  at: string;
-}
-
-/**
- * One mail the account sent (`desk-mail --sent`), for the Desk's "Waiting for an answer". Untrusted data, like every
- * source field. `text` is the start of the plain-text body without quoted lines or signature, at most 1000 characters.
- */
-export interface DeskSourceSentMail {
-  kind: "sent";
-  /** The RFC 5322 Message-ID without angle brackets. */
-  id: string;
-  from: DeskMailAddress;
-  /** To and Cc, at most 20. */
-  to: DeskMailAddress[];
-  subject: string;
-  /** ISO 8601. */
-  sentAt: string;
-  text?: string;
-  url?: string;
-  account?: string;
-  inReplyTo?: string;
-  references?: string[];
-  /** At most 10, oldest first. */
-  replies?: DeskSentReply[];
-}
+/** The command contract types the adapters declare themselves. The SDK's own types and schemas come from `./cortex-contract`. */
 
 export interface DeskSourceOutput {
   capabilities?: ("calendar" | "attention")[];
@@ -144,46 +20,9 @@ export interface DeskSourceOutput {
 }
 
 /**
- * The Desk writer contract (cortex#2774): Cortex writes one DeskWriteInput (a DeskWriteRequest plus its requestId) to a writer's stdin.
- * On success the writer exits 0 and prints one DeskWriteResult; on refusal it exits non-zero and the
- * last line of stderr, one plain sentence, is shown to the person. A writer creates nothing it refuses.
+ * The Desk writer contract (cortex#2774): a writer prints one DeskWriteResult on success (exit 0); on refusal it exits non-zero
+ * and the last line of stderr, one plain sentence, is shown to the person. A writer creates nothing it refuses.
  */
-export type DeskWriteKind = "calendar" | "task" | "goal" | "note" | "reminder";
-
-export interface DeskCalendarFields {
-  title: string;
-  /** ISO 8601. */
-  start: string;
-  end?: string;
-  allDay?: boolean;
-  location?: string;
-  notes?: string;
-}
-
-export interface DeskTaskFields {
-  title: string;
-  details?: string;
-  /** A work-graph root ref, e.g. the-metafactory/cortex#2770. */
-  map: string;
-}
-
-export interface DeskGoalFields {
-  wording: string;
-}
-
-export type DeskWriteRequest =
-  | { kind: "calendar"; fields: DeskCalendarFields }
-  | { kind: "task"; fields: DeskTaskFields }
-  | { kind: "goal"; fields: DeskGoalFields }
-  | { kind: "note"; fields: { text: string } }
-  | { kind: "reminder"; fields: { text: string; due: string } };
-
-/**
- * What a writer reads on stdin: a request plus the id of the confirmed Desk card, 8–64 of [A-Za-z0-9_-].
- * Every retry of one card carries the same id, so a writer can recognise a write it already made.
- */
-export type DeskWriteInput = DeskWriteRequest & { requestId: string };
-
 export interface DeskWriteResult {
   id: string;
   /** http(s) only. */
@@ -206,18 +45,9 @@ export interface DeskTaskCloseRequest {
 }
 
 /** The Desk parser contract: Cortex writes one DeskParseRequest to the parser's stdin. */
-export type DeskParseKind = DeskWriteKind | "conversation";
+export type DeskParseKind = Extract<AskKind, "reminder" | "note" | "task" | "goal" | "calendar" | "conversation">;
 
-export interface DeskCreationParseRequest {
-  operation?: "create";
-  text: string;
-  /** ISO 8601. */
-  now: string;
-  /** IANA, e.g. Europe/Zurich. */
-  timeZone: string;
-  kinds: DeskParseKind[];
-  maps: { ref: string; label: string }[];
-}
+export type DeskCreationParseRequest = Omit<ParserRequest, "kinds" | "routing"> & { operation?: "create"; kinds: DeskParseKind[] };
 
 /** The parser prints one of these; Cortex validates it and falls back to its own rules on any failure. */
 export interface BalanceParentRequest {
@@ -233,45 +63,7 @@ export type BalanceParentResult = { kind: "balance-parent"; parent: string | nul
 export type DeskParseResult =
   | BalanceParentResult
   | DeskWriteRequest
-  | { kind: "conversation"; fields: { text: string } }
   | { kind: "none"; reason: string };
-
-/** The legacy Desk mail-action contract: Cortex writes this to the `mc.desk.mail.actions.trash` command's stdin when no move command is set. */
-export interface DeskMailActionRequest {
-  action: "trash";
-  /** The account name the mail source put on the item. */
-  account: string;
-  /** The Message-ID without angle brackets, as the mail source sent it. */
-  messageId: string;
-}
-
-/** Where a move sends a mail. The command resolves each target to one folder per account; nothing is ever expunged. */
-export type DeskMoveTarget = "archive" | "junk" | "trash";
-
-/** The Desk move contract: Cortex writes this to the `mc.desk.mail.actions.move` command's stdin for Archive, Spam and Delete. */
-export interface DeskMailMoveRequest {
-  action: "move";
-  account: string;
-  /** The Message-ID without angle brackets. The command moves the one INBOX message with it, or refuses. */
-  messageId: string;
-  target: DeskMoveTarget;
-}
-
-/** Undo of a move: the same command moves the one message with this Message-ID from the target's folder back to INBOX. */
-export interface DeskMailRestoreRequest {
-  action: "restore";
-  account: string;
-  messageId: string;
-  /** The target the mail was moved to. */
-  from: DeskMoveTarget;
-}
-
-/** Where a mail is now: the same command answers it for a mail that left the Desk's list without a Desk action. */
-export interface DeskMailLocateRequest {
-  action: "locate";
-  account: string;
-  messageId: string;
-}
 
 /** `place` is the folder kind the message is in; `gone` when it is in none of INBOX, Archive, Junk or Trash. */
 export interface DeskMailLocateResult extends DeskWriteResult {
@@ -285,33 +77,6 @@ export interface DeskMailMoveResult extends DeskWriteResult {
   /** The folder the message is in now, e.g. "Archive", "Junk" or "INBOX". */
   folder: string;
   message: string;
-}
-
-/** The Desk reply-draft contract: Cortex writes this to the `mc.desk.mail.actions.draft` command's stdin. The command never sends. */
-export interface DeskMailDraftRequest {
-  action: "draft";
-  account: string;
-  /** The Message-ID being replied to, without angle brackets. */
-  messageId: string;
-  /** The original sender's address. */
-  to: string;
-  subject: string;
-  body: string;
-}
-
-/**
- * The Desk invitation-reply contract: Cortex writes this to the `mc.desk.mail.invitations.command` command's stdin after
- * the person confirmed the answer. The command sends the iTIP REPLY to the organizer. `uid` is the invitation's UID as the
- * mail source reported it; the command refuses when the mail's invitation has another.
- */
-export interface DeskInviteReplyRequest {
-  action: "invite-reply";
-  account: string;
-  messageId: string;
-  uid: string;
-  reply: "accept" | "decline";
-  /** The same for every retry of one confirmed answer: a command sends nothing for a request id it already sent. */
-  requestId: string;
 }
 
 /**
@@ -328,18 +93,6 @@ export interface DeskDeclinedCopyRequest {
   end?: string;
   /** The invitation carries RRULE or RDATE: the command removes the series. Without it a matching occurrence is refused. */
   recurring?: boolean;
-}
-
-/**
- * The Desk report contract: Cortex writes this to the `mc.desk.mail.report.command` command's stdin for Report. The
- * command saves a draft to `to` with the original attached as message/rfc822, for the principal to send. It never sends.
- */
-export interface DeskMailReportRequest {
-  action: "report";
-  account: string;
-  /** The Message-ID without angle brackets; the message is looked up in INBOX, then in Junk. */
-  messageId: string;
-  to: string;
 }
 
 /** The Desk DMARC contract: Cortex writes this to the `mc.desk.mail.dmarc.command` command's stdin for a report mail a rule kept for the digest. */

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { DeskMailInvitation, DeskMailLink, DeskSourceMail } from "../src/contract";
+import type { DeskMailInvitation, DeskMailLink, DeskSourceMail } from "../src/cortex-contract";
 import { invitationsIn, linksIn, lookbackIn, readItems, type ReadBox, type ReadMessage, type ReadQuery } from "../src/imap";
 import { invitationOpen, lookbackItems } from "../src/invitation-lookback";
 import { readFirstParagraph, toDeskMail as emailToDeskMail, type EmailListEntry } from "../src/mail";

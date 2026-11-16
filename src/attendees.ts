@@ -1,4 +1,4 @@
-import type { DeskSourceEvent } from "./contract";
+import type { DeskSourceEvent } from "./cortex-contract";
 
 /** The most attendees Cortex keeps per event (cortex#3628). */
 export const MAX_EVENT_ATTENDEES = 500;

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DeskSourceMail, DeskSourceSentMail } from "../src/contract";
+import type { DeskSourceMail, DeskSourceSentMail } from "../src/cortex-contract";
 import { readItems, readSentItems, type ReadBox, type ReadMessage, type ReadQuery } from "../src/imap";
 import { fixtureMessages, SELF, toFetched, type FixtureMessage } from "./fixtures/imap-sent-data";
 

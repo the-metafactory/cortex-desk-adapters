@@ -1,4 +1,5 @@
-import type { DeskMailLocateRequest, DeskMailLocateResult, DeskMailMoveRequest, DeskMailMoveResult, DeskMailRestoreRequest, DeskMoveTarget } from "./contract";
+import type { DeskMailLocateRequest, DeskMailMoveRequest, DeskMailRestoreRequest, DeskMoveTarget } from "./cortex-contract";
+import type { DeskMailLocateResult, DeskMailMoveResult } from "./contract";
 import { isRecord } from "./guards";
 import { Refusal } from "./writers";
 

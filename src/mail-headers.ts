@@ -1,4 +1,4 @@
-import type { DeskAuthVerdict, DeskMailHeaders } from "./contract";
+import type { DeskAuthVerdict, DeskMailHeaders } from "./cortex-contract";
 import { HOST } from "./host";
 
 const TEXT_FIELDS = {

@@ -1,7 +1,7 @@
 import { ImapFlow } from "imapflow";
 import type { ImapAccount } from "./imap-account";
 import { imapAccount } from "./imap-account";
-import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceSentMail } from "./contract";
+import type { DeskMailHeaders, DeskMailInvitation, DeskMailLink, DeskSourceMail, DeskSourceSentMail } from "./cortex-contract";
 import { firstParagraphOfHtmlBody } from "./mail";
 import { calendarPart, parseInvitation, parseReply, type CalendarPartNode } from "./invitation";
 import { addReply, invitationOpen, lookbackItems, type LookbackCandidate } from "./invitation-lookback";
