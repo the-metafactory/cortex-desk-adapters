@@ -5,11 +5,11 @@
     "": {
       "name": "desk-adapters",
       "dependencies": {
-        "@the-metafactory/cortex": "https://codeload.github.com/the-metafactory/cortex/tar.gz/refs/tags/v6.33.0",
         "imapflow": "^1.1.1",
         "zod": "4.3.6",
       },
       "devDependencies": {
+        "@the-metafactory/cortex": "https://codeload.github.com/the-metafactory/cortex/tar.gz/refs/tags/v6.33.0",
         "@types/bun": "^1.4.4",
         "typescript": "^7.0.2",
       },

@@ -1,6 +1,6 @@
-import type { AskKind, DeskSourceEvent, DeskSourceMail, DeskSourceSentMail, DeskWriteRequest, ParserRequest } from "./cortex-contract";
+import type { AskKind, DeskMoveTarget, DeskSourceEvent, DeskSourceMail, DeskSourceSentMail, DeskWriteRequest, ParserRequest } from "./cortex-contract";
 
-/** Types the Cortex Desk SDK does not export. The SDK's own types and schemas come from `./cortex-contract`. */
+/** The command contract types the adapters declare themselves. The SDK's own types and schemas come from `./cortex-contract`. */
 
 export interface DeskSourceOutput {
   capabilities?: ("calendar" | "attention")[];
@@ -67,7 +67,7 @@ export type DeskParseResult =
 
 /** `place` is the folder kind the message is in; `gone` when it is in none of INBOX, Archive, Junk or Trash. */
 export interface DeskMailLocateResult extends DeskWriteResult {
-  place: "inbox" | "archive" | "junk" | "trash" | "gone";
+  place: "inbox" | DeskMoveTarget | "gone";
   folder?: string;
   unread?: boolean;
 }

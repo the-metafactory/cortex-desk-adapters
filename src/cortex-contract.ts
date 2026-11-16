@@ -19,24 +19,17 @@ import type {
 } from "@the-metafactory/cortex/desk-sdk";
 
 export {
-  CloseAnswer,
   MailDraftCommandRequestSchema,
-  MailHeadersSchema,
   MailInvitationReplyCommandRequestSchema,
-  MailInvitationSchema,
-  MailLinkSchema,
   MailLocateCommandRequestSchema,
   MailLocateCommandResultSchema,
   MailMoveCommandRequestSchema,
   MailMoveCommandResultSchema,
   MailReportCommandRequestSchema,
   MailRestoreCommandRequestSchema,
-  ParserAnswerSchema,
-  ParserFieldSchemas,
   SourceEventSchema,
   SourceMailSchema,
   SourceOutputSchema,
-  SourceSentSchema,
   WriterAnswer,
 } from "@the-metafactory/cortex/desk-sdk";
 export type { AskCard, AskFields, AskKind, ParserRequest, WriterRequest } from "@the-metafactory/cortex/desk-sdk";
@@ -54,7 +47,7 @@ export type DeskSentReply = NonNullable<SourceSent["replies"]>[number];
 
 export type DeskWriteRequest = AskCard;
 export type DeskWriteInput = WriterRequest;
-export type DeskWriteKind = AskKind;
+export type DeskWriteKind = Exclude<AskKind, "conversation">;
 export type DeskCalendarFields = AskFields["calendar"];
 export type DeskTaskFields = AskFields["task"];
 export type DeskGoalFields = AskFields["goal"];

@@ -3,10 +3,12 @@ import { createCalendarEvent } from "../src/calendar-create";
 import {
   MailDraftCommandRequestSchema,
   MailInvitationReplyCommandRequestSchema,
+  MailLocateCommandRequestSchema,
   MailLocateCommandResultSchema,
   MailMoveCommandRequestSchema,
   MailMoveCommandResultSchema,
   MailReportCommandRequestSchema,
+  MailRestoreCommandRequestSchema,
   SourceEventSchema,
   SourceMailSchema,
   SourceOutputSchema,
@@ -16,6 +18,7 @@ import { toDeskMail } from "../src/imap-mail";
 import { locateMessage, moveMessage, readMoveRequest, type Mailbox } from "../src/move";
 import { readDraftRequest } from "../src/draft";
 import { readReportRequest } from "../src/report";
+import type { DeskInviteReplyRequest } from "../src/cortex-contract";
 import type { DeskSourceOutput } from "../src/contract";
 import type { Runner } from "../src/run";
 
@@ -70,6 +73,11 @@ it("mail action family: requests the commands read and results they print match 
   expect(MailMoveCommandRequestSchema.parse(readMoveRequest(JSON.stringify(move)))).toEqual(move);
   expect(MailMoveCommandRequestSchema.safeParse({ ...move, target: "elsewhere" }).success).toBe(false);
 
+  const restore = { action: "restore" as const, account: "work", messageId: "a@x", from: "trash" as const };
+  expect(MailRestoreCommandRequestSchema.parse(readMoveRequest(JSON.stringify(restore)))).toEqual(restore);
+  const locate = { action: "locate" as const, account: "work", messageId: "a@x" };
+  expect(MailLocateCommandRequestSchema.parse(readMoveRequest(JSON.stringify(locate)))).toEqual(locate);
+
   const moved = await moveMessage({ account: "work", messageId: "a@x", target: "archive" }, box({ INBOX: { 1: "<a@x>" } }));
   expect(MailMoveCommandResultSchema.parse(JSON.stringify(moved))).toEqual({ message: moved.message, folder: moved.folder });
 
@@ -81,6 +89,6 @@ it("mail action family: requests the commands read and results they print match 
   expect(MailDraftCommandRequestSchema.parse(readDraftRequest(JSON.stringify(draft)))).toEqual(draft);
   const report = { action: "report" as const, account: "work", messageId: "a@x", to: "abuse@example.org" };
   expect(MailReportCommandRequestSchema.parse(readReportRequest(JSON.stringify(report)))).toEqual(report);
-  const invite = { action: "invite-reply" as const, account: "work", messageId: "a@x", uid: "u1", reply: "accept" as const, requestId: "req-00000001" };
+  const invite: DeskInviteReplyRequest = { action: "invite-reply", account: "work", messageId: "a@x", uid: "u1", reply: "accept", requestId: "req-00000001" };
   expect(MailInvitationReplyCommandRequestSchema.parse(invite)).toEqual(invite);
 });
