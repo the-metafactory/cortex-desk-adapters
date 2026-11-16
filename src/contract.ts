@@ -58,7 +58,12 @@ export interface BalanceParentRequest {
   parents: { id: string; area: string; path: string }[];
 }
 
+/** The prompts Cortex writes for the parser: the system message and the user message, sent to the provider unchanged. */
+export type ParseMessages = { system: string; user: string };
+
 export type DeskParseRequest = DeskCreationParseRequest | BalanceParentRequest;
+/** What `desk-parse` reads from stdin: the request plus Cortex's prompts, as `messages: [{ role, content }]` on the wire. */
+export type ParseInput = DeskParseRequest & { messages: ParseMessages };
 export type BalanceParentResult = { kind: "balance-parent"; parent: string | null; reason: string };
 export type DeskParseResult =
   | BalanceParentResult

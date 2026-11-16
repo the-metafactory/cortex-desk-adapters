@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
-import { buildPrompt, extractJson, readParseRequest, validateParse } from "../src/parse";
+import { extractJson, readParseRequest, validateParse } from "../src/parse";
 import { lastLine, spawnRunner } from "../src/run";
 import { claudeArgv, readBoundedInput, readRoutingConfig, routedParse, unavailable } from "../src/routed-parse";
 
@@ -25,7 +25,7 @@ if (values["routing-config"] !== undefined) {
 } else {
   try {
     const req = readParseRequest(await new Response(Bun.stdin.stream()).text());
-    const out = await spawnRunner(claudeArgv(values.claude ?? "claude", values.model ?? "haiku", "text"), buildPrompt(req));
+    const out = await spawnRunner(claudeArgv(values.claude ?? "claude", values.model ?? "haiku", req.messages.system, "text"), req.messages.user);
     if (out.code !== 0) throw new Error(`claude exited ${out.code}: ${lastLine(out.stderr)}`);
     process.stdout.write(`${JSON.stringify(validateParse(extractJson(out.stdout), req))}\n`);
   } catch (error) {
