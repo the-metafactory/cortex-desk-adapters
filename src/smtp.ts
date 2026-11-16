@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isRecord } from "./guards";
-import { resolvePassword } from "./imap-account";
+import { mailAccountRecord, mailConfigPath, readMailConfig, resolvePassword } from "./mail-config";
 import { lastLine, type Runner } from "./run";
 import { Refusal } from "./writers";
 
@@ -19,39 +19,18 @@ export interface SmtpAccount {
 
 export const ADDRESS = /^[^\s<>,@"]+@[^\s<>,@"]+$/;
 const HOST = /^[A-Za-z0-9.-]{1,253}$/;
-const emailConfigPath = (): string => join(homedir(), ".config", "email", "config.json");
 const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
-async function readConfig(path: string): Promise<{ accounts: Record<string, unknown>; defaultAccount?: string }> {
-  let config: unknown;
-  try {
-    config = JSON.parse(await readFile(path, "utf8"));
-  } catch {
-    throw new Refusal("The email config could not be read.");
-  }
-  const accounts = isRecord(config) && isRecord(config.accounts) ? config.accounts : {};
-  const defaultAccount = isRecord(config) ? str(config.defaultAccount) : undefined;
-  return { accounts, ...(defaultAccount ? { defaultAccount } : {}) };
-}
-
-async function accountRecord(name: string, path: string): Promise<Record<string, unknown>> {
-  const { accounts } = await readConfig(path);
-  const key = Object.keys(accounts).find((k) => k.toLowerCase() === name.toLowerCase());
-  const account = key === undefined ? undefined : accounts[key];
-  if (!isRecord(account)) throw new Refusal(`There is no ${name} account in the email config.`);
-  return account;
-}
-
-/** The email config's default account, which a command uses when a request names none. */
-export async function defaultAccountName(path = emailConfigPath()): Promise<string> {
-  const { defaultAccount } = await readConfig(path);
-  if (!defaultAccount) throw new Refusal("The email config names no default account.");
+/** The mail config's default account, which a command uses when a request names none. */
+export async function defaultAccountName(path = mailConfigPath()): Promise<string> {
+  const { defaultAccount } = await readMailConfig(path);
+  if (!defaultAccount) throw new Refusal("The mail config names no default account.");
   return defaultAccount;
 }
 
 /** The account's own addresses (its From address and its SMTP and IMAP user names that are addresses), lowercased. */
-export async function accountAddresses(name: string, path = emailConfigPath()): Promise<string[]> {
-  const account = await accountRecord(name, path);
+export async function accountAddresses(name: string, path = mailConfigPath()): Promise<string[]> {
+  const account = await mailAccountRecord(name, path);
   const from = isRecord(account.from) ? str(account.from.email) : undefined;
   const smtpUser = isRecord(account.smtp) && isRecord(account.smtp.auth) ? str(account.smtp.auth.user) : undefined;
   const imapUser = isRecord(account.imap) && isRecord(account.imap.auth) ? str(account.imap.auth.user) : undefined;
@@ -59,11 +38,11 @@ export async function accountAddresses(name: string, path = emailConfigPath()): 
 }
 
 /**
- * The From address of every account in the email config, lowercased: the addresses the principal configured as their own.
+ * The From address of every account in the mail config, lowercased: the addresses the principal configured as their own.
  * A login name is left out, even one shaped like an address, because a relay or shared-mailbox login may belong to someone else.
  */
-export async function ownAddresses(path = emailConfigPath()): Promise<string[]> {
-  const { accounts } = await readConfig(path);
+export async function ownAddresses(path = mailConfigPath()): Promise<string[]> {
+  const { accounts } = await readMailConfig(path);
   const froms = Object.values(accounts).flatMap((account) => {
     const from = isRecord(account) && isRecord(account.from) ? str(account.from.email)?.trim() : undefined;
     return from && ADDRESS.test(from) ? [from.toLowerCase()] : [];
@@ -71,9 +50,9 @@ export async function ownAddresses(path = emailConfigPath()): Promise<string[]> 
   return [...new Set(froms)];
 }
 
-/** Reads one account's SMTP settings and From address from the `email` CLI's config, resolving the password. */
-export async function smtpAccount(name: string, run: Runner, path = emailConfigPath()): Promise<SmtpAccount> {
-  const account = await accountRecord(name, path);
+/** Reads one account's SMTP settings and From address from the selected mail config, resolving the password. */
+export async function smtpAccount(name: string, run: Runner, path = mailConfigPath()): Promise<SmtpAccount> {
+  const account = await mailAccountRecord(name, path);
   const smtp = isRecord(account.smtp) ? account.smtp : undefined;
   const auth = smtp && isRecord(smtp.auth) ? smtp.auth : {};
   const host = str(smtp?.host);
