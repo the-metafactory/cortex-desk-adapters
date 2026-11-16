@@ -4,63 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeskSourceMail, DeskSourceSentMail } from "../src/contract";
 import { readItems, readSentItems, type ReadBox, type ReadMessage, type ReadQuery } from "../src/imap";
+import { fixtureMessages, SELF, toFetched, type FixtureMessage } from "./fixtures/imap-sent-data";
 
 const HOUR = 3_600_000;
-const DAY = 86_400_000;
 const NOW = Date.parse("2026-11-02T12:00:00Z");
-const SELF = ["imap-user@example.org"];
-
-interface Fixture {
-  uid: number;
-  messageId: string;
-  inReplyTo?: string;
-  references?: string[];
-  subject: string;
-  from: string;
-  to: string[];
-  date: Date;
-  seen: boolean;
-  body: string;
-  type?: "text/plain" | "text/html" | "text/calendar";
-}
-
-const INBOX: Fixture[] = [
-  { uid: 11, messageId: "<reply@example.org>", inReplyTo: "<quote@example.org>", subject: "Re: Venue quote", from: "priya@example.org", to: SELF, date: new Date(NOW - 12 * HOUR), seen: true, body: "Yes, catering is included." },
-  { uid: 12, messageId: "<inbox@example.org>", references: ["<p0@example.org>"], subject: "Inbox note", from: "sam@example.org", to: SELF, date: new Date(NOW - 2 * HOUR), seen: false, body: "A plain inbox note.\n\nSecond line." },
-];
-
-const SENT: Fixture[] = [
-  { uid: 103, messageId: "<quote@example.org>", references: ["<p0@example.org>"], subject: "Venue quote", from: SELF[0]!, to: ["priya@example.org"], date: new Date(NOW - 23 * HOUR), seen: true, body: "Hi Priya,\n\ndoes the venue quote include catering?\n\nThanks, Sam\n\nOn Mon, 26 Oct 2026 at 08:00, Priya wrote:\n> Here is the quote." },
-  { uid: 102, messageId: "<second@example.org>", subject: "Second", from: SELF[0]!, to: ["bob@example.org"], date: new Date(NOW - 2 * DAY), seen: true, body: "Can you send the deck?" },
-  { uid: 101, messageId: "<old@example.org>", subject: "Old", from: SELF[0]!, to: ["priya@example.org"], date: new Date(NOW - 20 * DAY), seen: true, body: "Old mail." },
-];
-
-const SENT_ITEMS: Fixture[] = [
-  { uid: 201, messageId: "<quote@example.org>", references: ["<p0@example.org>"], subject: "Venue quote", from: SELF[0]!, to: ["priya@example.org"], date: new Date(NOW - 23 * HOUR), seen: true, body: "Hi Priya, duplicate." },
-];
-
-const ARCHIVE: Fixture[] = [
-  { uid: 301, messageId: "<archive-reply@example.org>", inReplyTo: "<second@example.org>", subject: "Re: Second", from: "bob@example.org", to: SELF, date: new Date(NOW - 1 * HOUR), seen: true, body: "Deck is on its way." },
-];
-
-/** What imapflow returns for `headers`: only the requested headers, so `referencesOf` sees only References. */
-const headersOf = (m: Fixture, requested?: string[]): Buffer | undefined => {
-  if (!requested) return undefined;
-  const references = m.references?.length ? [`References: ${m.references.map((id) => `<${id}>`).join(" ")}`] : [];
-  if (requested.length === 1 && requested[0]?.toLowerCase() === "references") {
-    return references.length ? Buffer.from(`${references[0]}\r\n\r\n`) : undefined;
-  }
-  const lines = [
-    `Message-ID: <${m.messageId}>`,
-    `Subject: ${m.subject}`,
-    `From: ${m.from}`,
-    `To: ${m.to.join(", ")}`,
-    `Date: ${m.date.toUTCString()}`,
-    ...(m.inReplyTo ? [`In-Reply-To: <${m.inReplyTo}>`] : []),
-    ...references,
-  ];
-  return Buffer.from(`${lines.join("\r\n")}\r\n\r\n`);
-};
 
 interface Open {
   path: string;
@@ -74,18 +21,19 @@ interface Fetch {
 
 /** A fixture mailbox over the read-box seam: every search, fetch and body read happens inside `inFolder`. */
 function fixtureBox(options: { duplicateSent?: boolean; failSent?: boolean } = {}): { box: ReadBox; reads: string[]; outside: string[]; opens: Open[]; fetches: Fetch[] } {
-  const folders: Record<string, Fixture[]> = {
-    INBOX,
-    Sent: SENT,
-    ...(options.duplicateSent ? { "Sent Items": SENT_ITEMS } : {}),
-    Archive: ARCHIVE,
+  const messages = fixtureMessages(NOW);
+  const folders: Record<string, FixtureMessage[]> = {
+    INBOX: messages.INBOX,
+    Sent: messages.Sent,
+    ...(options.duplicateSent ? { "Sent Items": messages["Sent Items"] } : {}),
+    Archive: messages.Archive,
   };
   const reads: string[] = [];
   const outside: string[] = [];
   const opens: Open[] = [];
   const fetches: Fetch[] = [];
   let open = "";
-  const current = (): Fixture[] => folders[open] ?? [];
+  const current = (): FixtureMessage[] => folders[open] ?? [];
   const inside = (what: string): void => { if (!open) outside.push(what); };
   const box: ReadBox = {
     folders: async () => [
@@ -119,17 +67,7 @@ function fixtureBox(options: { duplicateSent?: boolean; failSent?: boolean } = {
       fetches.push({ folder: open, ...(query.headers ? { headers: query.headers } : {}) });
       return current()
         .filter((f) => uids.includes(f.uid))
-        .map((f) => ({
-          uid: f.uid,
-          ...(query.envelope ? { envelope: { messageId: f.messageId, ...(f.inReplyTo ? { inReplyTo: f.inReplyTo } : {}), subject: f.subject, date: f.date, from: [{ address: f.from }], to: f.to.map((address) => ({ address })) } } : {}),
-          ...(query.bodyStructure ? { bodyStructure: { part: "1", type: f.type ?? "text/plain" } } : {}),
-          ...(query.internalDate ? { internalDate: f.date } : {}),
-          ...(query.flags ? { flags: new Set(f.seen ? ["\\Seen"] : []) } : {}),
-          ...((): { headers?: Buffer } => {
-            const headers = headersOf(f, query.headers);
-            return headers ? { headers } : {};
-          })(),
-        }));
+        .map((f) => toFetched(f, query));
     },
     text: async (uid) => {
       inside("text");

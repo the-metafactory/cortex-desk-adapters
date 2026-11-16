@@ -375,14 +375,15 @@ export async function readSentItems(box: ReadBox, options: SentReadOptions): Pro
   }
   const sent: DeskSourceSentMail[] = [];
   for (const path of new Set(newest.map((l) => l.path))) {
+    const group = newest.filter((x) => x.path === path);
     await box.inFolder(path, async () => {
-      for (const l of newest.filter((x) => x.path === path)) {
+      for (const l of group) {
         const text = await sentTextIn(box, l.uid, l.structure).catch(() => undefined);
         sent.push(withReplies(text ? { ...l.item, text } : l.item, candidates));
       }
     }).catch((err: unknown) => {
       warn(`the text of sent mail in ${path} was not read: ${errorText(err)}`);
-      for (const l of newest.filter((x) => x.path === path)) sent.push(withReplies(l.item, candidates));
+      for (const l of group) sent.push(withReplies(l.item, candidates));
     });
   }
   return sent.sort((a, b) => Date.parse(b.sentAt) - Date.parse(a.sentAt));
