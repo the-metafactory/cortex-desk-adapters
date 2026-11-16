@@ -47,6 +47,13 @@ Set `DESK_IMAP_PASSWORD` in the adapter's environment before running the command
 | `--account` | `mail` | Label carried on each item |
 | `--limit` | `30` | Maximum messages, from 1 to 200 |
 | `--password-env` | `DESK_IMAP_PASSWORD` | Password environment variable |
+| `--config` | none | Mail config file; reads host, port, TLS, user and secret from the account named by `--account`. Use it instead of `--host` and `--user`; combining them exits 2. |
+
+```sh
+bun bin/desk-imap.ts --config /path/to/mail.json --account personal
+```
+
+With `--config`, no secret sits in an environment variable. An account the file does not hold, or a file that cannot be read, exits 1 and prints no JSON.
 
 The account label identifies this source. It does not configure the personal `email` CLI or its trash and draft writers. Configure compatible action commands separately before enabling mail writes.
 
