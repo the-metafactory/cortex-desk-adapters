@@ -102,3 +102,8 @@ export function toDeskMail(entry: EmailListEntry, account: string, paragraph: st
     account,
   };
 }
+
+/** The same paragraph from an HTML body read directly (over IMAP), by the same visible-text rules as `firstParagraphOfHtml`. */
+export function firstParagraphOfHtmlBody(html: string, subject?: string): string | undefined {
+  return paragraphOf(htmlText(html), subject);
+}

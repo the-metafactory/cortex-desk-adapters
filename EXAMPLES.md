@@ -35,7 +35,9 @@ bun bin/desk-imap.ts --host imap.example.org --user sam@example.org --account pe
 
 Set `DESK_IMAP_PASSWORD` in the adapter's environment before running the command. `--password-env <name>` selects another variable. Passwords never go in argv. A Cortex service needs the variable in its own environment.
 
-`desk-imap` opens INBOX read-only and prints at most 30 unread messages, newest UID first. It fetches envelopes and up to 16 KiB of the first plain-text body part without marking mail read. Messages without a sender or Message-ID are omitted. HTML-only messages have no `firstParagraph`. Body download failures leave the envelope visible without a paragraph.
+`desk-imap` opens INBOX read-only and prints at most 30 unread messages, newest UID first. It fetches envelopes and the first body part (up to 16 KiB of plain text, or up to 256 KiB of HTML when the message has no plain-text part) without marking mail read (`BODY.PEEK`). An HTML-only message gets its `firstParagraph` from the HTML's visible text by the same rules as `desk-mail`: scripts, styles, the head, comments and hidden elements are dropped, and a first paragraph that only repeats the subject is skipped. Unread messages with an HTML body also carry `links` (at most 20, the same as `desk-mail`), and a `text/calendar` meeting request becomes the item's `invitation` unless a reply in a Sent folder answers it or the event is over. Older INBOX mail with an open invitation is added by the look-back, as `desk-mail` does it. Messages without a sender or Message-ID are omitted. A failed body, links or invitation read lists the mail without that field and writes one line to stderr.
+
+The invitation needs the account's own addresses. With `--config` they come from the account's `from` address and its login names; with the flag route the `--user` login is used when it is an address.
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -47,6 +49,9 @@ Set `DESK_IMAP_PASSWORD` in the adapter's environment before running the command
 | `--account` | `mail` | Label carried on each item |
 | `--limit` | `30` | Maximum messages, from 1 to 200 |
 | `--password-env` | `DESK_IMAP_PASSWORD` | Password environment variable |
+| `--invite-days` | `14` | Invitation look-back, from 1 to 60 days |
+| `--invite-scan` | `200` | Newest messages scanned for invitations, from 1 to 1000 |
+| `--invite-limit` | `10` | Older mails added for an open invitation, from 1 to 50 |
 | `--config` | none | Mail config file; reads host, port, TLS, user and secret from the account named by `--account`. Use it instead of `--host` and `--user`; combining them exits 2. |
 
 ```sh

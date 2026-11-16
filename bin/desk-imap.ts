@@ -2,9 +2,11 @@
 import { parseArgs } from "node:util";
 import { ImapFlow } from "imapflow";
 import { Refusal } from "../src/writers";
-import { firstParagraph, resolveImapSource, textPart, toDeskMail, UsageError, type StructureNode } from "../src/imap-mail";
-import { HEADER_FIELDS, headersOf } from "../src/mail-headers";
-import type { DeskSourceMail, DeskSourceOutput } from "../src/contract";
+import { resolveImapSource, UsageError } from "../src/imap-mail";
+import { errorText, imapReadBox, readItems } from "../src/imap";
+import { LOOKBACK } from "../src/invitation-lookback";
+import { accountAddresses } from "../src/smtp";
+import type { DeskSourceOutput } from "../src/contract";
 
 const { values } = parseArgs({
   options: {
@@ -18,6 +20,9 @@ const { values } = parseArgs({
     config: { type: "string" },
     limit: { type: "string", default: "30" },
     authserv: { type: "string", multiple: true, default: [] },
+    "invite-days": { type: "string", default: String(LOOKBACK.days) },
+    "invite-scan": { type: "string", default: String(LOOKBACK.scan) },
+    "invite-limit": { type: "string", default: String(LOOKBACK.limit) },
   },
 });
 
@@ -26,8 +31,16 @@ const fail = (line: string): never => {
   process.exit(1);
 };
 
-const limit = Number(values.limit);
-if (!Number.isInteger(limit) || limit < 1 || limit > 200) fail("--limit must be a whole number from 1 to 200.");
+const whole = (raw: string | undefined, name: string, max: number): number => {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > max) fail(`--${name} must be a whole number from 1 to ${max}.`);
+  return n;
+};
+
+const limit = whole(values.limit, "limit", 200);
+const inviteDays = whole(values["invite-days"], "invite-days", LOOKBACK.maxDays);
+const inviteScan = whole(values["invite-scan"], "invite-scan", LOOKBACK.maxScan);
+const inviteLimit = whole(values["invite-limit"], "invite-limit", LOOKBACK.maxLimit);
 
 const source = await resolveImapSource(values).catch((err: unknown) => {
   if (err instanceof UsageError) {
@@ -37,6 +50,11 @@ const source = await resolveImapSource(values).catch((err: unknown) => {
   return fail(err instanceof Refusal ? err.message : `desk-imap: ${err instanceof Error ? err.message : String(err)}`);
 });
 
+const warn = (line: string): void => void process.stderr.write(`desk-imap: ${source.account}: ${line}\n`);
+
+const self = values.config !== undefined ? await accountAddresses(source.account, values.config).catch(() => []) : source.user.includes("@") ? [source.user.toLowerCase()] : [];
+if (self.length === 0) warn("the account has no address of its own, so invitations are listed without an attendee");
+
 const client = new ImapFlow({
   host: source.host,
   port: source.port,
@@ -45,39 +63,22 @@ const client = new ImapFlow({
   auth: { user: source.user, pass: source.pass },
   logger: false,
 });
-
-async function readText(uid: number, structure: StructureNode | undefined): Promise<string | undefined> {
-  const part = textPart(structure);
-  if (!part) return undefined;
-  const { content } = await client.download(String(uid), part, { uid: true, maxBytes: 16_384 });
-  const chunks: Buffer[] = [];
-  for await (const chunk of content) chunks.push(Buffer.from(chunk));
-  return firstParagraph(Buffer.concat(chunks).toString("utf8"));
-}
+client.on("error", () => undefined);
 
 try {
   await client.connect();
-  const lock = await client.getMailboxLock(values.mailbox ?? "INBOX", { readOnly: true });
-  const items: DeskSourceMail[] = [];
-  try {
-    const uids = (await client.search({ seen: false }, { uid: true })) || [];
-    const newest = uids.sort((a, b) => b - a).slice(0, limit);
-    if (newest.length > 0) {
-      const messages = await client.fetchAll(newest, { envelope: true, bodyStructure: true, internalDate: true, headers: HEADER_FIELDS }, { uid: true });
-      for (const m of messages) {
-        const paragraph = await readText(m.uid, m.bodyStructure).catch(() => undefined);
-        const received = m.internalDate instanceof Date ? m.internalDate : new Date();
-        const item = m.envelope ? toDeskMail(m.envelope, source.account, paragraph, received) : null;
-        const headers = headersOf(m, values.authserv);
-        if (item) items.push(headers ? { ...item, headers } : item);
-      }
-    }
-  } finally {
-    lock.release();
-  }
+  const items = await readItems(imapReadBox(client), {
+    account: source.account,
+    mailbox: values.mailbox ?? "INBOX",
+    limit,
+    self,
+    authserv: values.authserv,
+    invite: { days: inviteDays, scan: inviteScan, limit: inviteLimit },
+    warn,
+  });
   await client.logout();
   const output: DeskSourceOutput = { capabilities: ["attention"], items };
   process.stdout.write(JSON.stringify(output));
 } catch (err) {
-  fail(`desk-imap: ${err instanceof Error ? err.message : String(err)}`);
+  fail(`desk-imap: ${errorText(err)}`);
 }
