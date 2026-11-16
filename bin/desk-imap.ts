@@ -1,19 +1,21 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
 import { ImapFlow } from "imapflow";
-import { firstParagraph, textPart, toDeskMail, type StructureNode } from "../src/imap-mail";
+import { Refusal } from "../src/writers";
+import { firstParagraph, resolveImapSource, textPart, toDeskMail, UsageError, type StructureNode } from "../src/imap-mail";
 import { HEADER_FIELDS, headersOf } from "../src/mail-headers";
 import type { DeskSourceMail, DeskSourceOutput } from "../src/contract";
 
 const { values } = parseArgs({
   options: {
     host: { type: "string" },
-    port: { type: "string", default: "993" },
+    port: { type: "string" },
     user: { type: "string" },
-    "password-env": { type: "string", default: "DESK_IMAP_PASSWORD" },
+    "password-env": { type: "string" },
     starttls: { type: "boolean", default: false },
     mailbox: { type: "string", default: "INBOX" },
-    account: { type: "string", default: "mail" },
+    account: { type: "string" },
+    config: { type: "string" },
     limit: { type: "string", default: "30" },
     authserv: { type: "string", multiple: true, default: [] },
   },
@@ -24,22 +26,23 @@ const fail = (line: string): never => {
   process.exit(1);
 };
 
-const host = values.host ?? fail("Usage: desk-imap --host <imap host> --user <login> [--password-env DESK_IMAP_PASSWORD] [--account <label>]");
-const user = values.user ?? fail("desk-imap needs --user.");
-const passwordVar = values["password-env"] ?? "DESK_IMAP_PASSWORD";
-const pass = process.env[passwordVar] || fail(`Set the IMAP password in the environment variable ${passwordVar}.`);
 const limit = Number(values.limit);
 if (!Number.isInteger(limit) || limit < 1 || limit > 200) fail("--limit must be a whole number from 1 to 200.");
 
-const port = Number(values.port);
-if (!Number.isInteger(port) || port < 1 || port > 65535) fail("--port must be a whole number from 1 to 65535.");
+const source = await resolveImapSource(values).catch((err: unknown) => {
+  if (err instanceof UsageError) {
+    process.stderr.write(`${err.message}\n`);
+    process.exit(2);
+  }
+  return fail(err instanceof Refusal ? err.message : `desk-imap: ${err instanceof Error ? err.message : String(err)}`);
+});
 
 const client = new ImapFlow({
-  host,
-  port,
-  secure: !values.starttls,
-  ...(values.starttls ? { doSTARTTLS: true } : {}),
-  auth: { user, pass },
+  host: source.host,
+  port: source.port,
+  secure: source.secure,
+  ...(source.starttls ? { doSTARTTLS: true } : {}),
+  auth: { user: source.user, pass: source.pass },
   logger: false,
 });
 
@@ -64,7 +67,7 @@ try {
       for (const m of messages) {
         const paragraph = await readText(m.uid, m.bodyStructure).catch(() => undefined);
         const received = m.internalDate instanceof Date ? m.internalDate : new Date();
-        const item = m.envelope ? toDeskMail(m.envelope, values.account ?? "mail", paragraph, received) : null;
+        const item = m.envelope ? toDeskMail(m.envelope, source.account, paragraph, received) : null;
         const headers = headersOf(m, values.authserv);
         if (item) items.push(headers ? { ...item, headers } : item);
       }

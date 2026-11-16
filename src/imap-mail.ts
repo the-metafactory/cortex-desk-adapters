@@ -1,4 +1,56 @@
 import type { DeskSourceMail } from "./contract";
+import { imapAccount } from "./imap-account";
+import type { MailConfigReader } from "./mail-config";
+import { spawnRunner, type Runner } from "./run";
+import { Refusal } from "./writers";
+
+export class UsageError extends Error {}
+
+export interface ImapSource {
+  account: string;
+  host: string;
+  port: number;
+  secure: boolean;
+  starttls: boolean;
+  user: string;
+  pass: string;
+}
+
+export interface ImapArgs {
+  host?: string;
+  port?: string;
+  user?: string;
+  "password-env"?: string;
+  starttls?: boolean;
+  account?: string;
+  config?: string;
+}
+
+export interface ImapDeps {
+  env?: Record<string, string | undefined>;
+  readConfig?: MailConfigReader;
+  run?: Runner;
+}
+
+/** Resolves where desk-imap connects: an account in the mail config file, or the flag route. */
+export async function resolveImapSource(args: ImapArgs, deps: ImapDeps = {}): Promise<ImapSource> {
+  if (args.config !== undefined) {
+    if (args.host !== undefined || args.user !== undefined) throw new UsageError("Use --config or --host and --user, not both.");
+    if (!args.account) throw new UsageError("desk-imap --config needs --account.");
+    const acct = await imapAccount(args.account, deps.run ?? spawnRunner, args.config, deps.readConfig);
+    return { account: acct.name, host: acct.host, port: acct.port, secure: acct.secure, starttls: false, user: acct.user, pass: acct.pass };
+  }
+  const env = deps.env ?? process.env;
+  if (!args.host) throw new UsageError("Usage: desk-imap --host <imap host> --user <login> [--password-env DESK_IMAP_PASSWORD] [--account <label>]");
+  if (!args.user) throw new UsageError("desk-imap needs --user.");
+  const passwordVar = args["password-env"] ?? "DESK_IMAP_PASSWORD";
+  const pass = env[passwordVar];
+  if (!pass) throw new Refusal(`Set the IMAP password in the environment variable ${passwordVar}.`);
+  const port = Number(args.port ?? "993");
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Refusal("--port must be a whole number from 1 to 65535.");
+  const starttls = args.starttls === true;
+  return { account: args.account ?? "mail", host: args.host, port, secure: !starttls, starttls, user: args.user, pass };
+}
 
 export interface StructureNode {
   part?: string;

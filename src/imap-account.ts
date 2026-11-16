@@ -1,5 +1,5 @@
 import { isRecord } from "./guards";
-import { mailAccountRecord, mailConfigPath, resolvePassword } from "./mail-config";
+import { mailAccountRecord, mailConfigPath, resolvePassword, type MailConfigReader } from "./mail-config";
 import type { Runner } from "./run";
 import { Refusal } from "./writers";
 
@@ -17,8 +17,8 @@ export interface ImapAccount {
 const str = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
 /** Reads one account's IMAP settings from the selected mail config, resolving its password. */
-export async function imapAccount(name: string, run: Runner, path = mailConfigPath()): Promise<ImapAccount> {
-  const account = await mailAccountRecord(name, path);
+export async function imapAccount(name: string, run: Runner, path = mailConfigPath(), read?: MailConfigReader): Promise<ImapAccount> {
+  const account = await mailAccountRecord(name, path, read);
   const imap = isRecord(account.imap) ? account.imap : undefined;
   const smtpAuth = isRecord(account.smtp) && isRecord(account.smtp.auth) ? account.smtp.auth : {};
   const imapAuth = imap && isRecord(imap.auth) ? imap.auth : {};
