@@ -101,6 +101,9 @@ func readReminderRequest() -> ReminderRequest {
 
 let store = EKEventStore()
 func hasFullAccess() -> Bool {
+  #if REMINDERS_ACCESS_FIXTURE
+  return ProcessInfo.processInfo.environment["REMINDERS_TEST_GRANT"] == "granted"
+  #else
   switch EKEventStore.authorizationStatus(for: .reminder) {
   case .fullAccess: return true
   case .notDetermined:
@@ -114,6 +117,7 @@ func hasFullAccess() -> Bool {
     return granted
   default: return false
   }
+  #endif
 }
 func requireFullAccess() {
   guard hasFullAccess() else { refuse("desk-reminders-mac has no full access to Reminders; allow it in System Settings > Privacy & Security > Reminders.", 3) }
