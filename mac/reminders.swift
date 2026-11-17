@@ -5,7 +5,7 @@
 // this binary whoever starts it. stdin is read only after the relaunch, and every input check runs before any
 // EventKit access, so a refused request touches nothing.
 //
-// Usage: desk-reminders-mac [--list <name>]
+// Usage: desk-reminders-mac [--list <name>] | --check-access
 
 import EventKit
 import Foundation
@@ -41,9 +41,10 @@ func relaunchDisclaimed() -> Never {
 
 if ProcessInfo.processInfo.environment[disclaimedFlag] == nil { relaunchDisclaimed() }
 
+let checkAccess = Array(CommandLine.arguments.dropFirst()) == ["--check-access"]
 var listName: String?
 var args = CommandLine.arguments.dropFirst().makeIterator()
-while let arg = args.next() {
+while !checkAccess, let arg = args.next() {
   switch arg {
   case "--list":
     guard let name = args.next(), !name.trimmingCharacters(in: .whitespaces).isEmpty else { refuse("--list needs the name of a Reminders list.") }
@@ -98,8 +99,6 @@ func readReminderRequest() -> ReminderRequest {
   return ReminderRequest(text: title, due: due, requestId: requestId)
 }
 
-let request = readReminderRequest()
-
 let store = EKEventStore()
 func hasFullAccess() -> Bool {
   switch EKEventStore.authorizationStatus(for: .reminder) {
@@ -116,7 +115,17 @@ func hasFullAccess() -> Bool {
   default: return false
   }
 }
-guard hasFullAccess() else { refuse("desk-reminders-mac has no full access to Reminders; allow it in System Settings > Privacy & Security > Reminders.", 3) }
+func requireFullAccess() {
+  guard hasFullAccess() else { refuse("desk-reminders-mac has no full access to Reminders; allow it in System Settings > Privacy & Security > Reminders.", 3) }
+}
+
+if checkAccess {
+  requireFullAccess()
+  exit(0)
+}
+
+let request = readReminderRequest()
+requireFullAccess()
 
 let target: EKCalendar
 if let name = listName {

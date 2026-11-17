@@ -51,3 +51,9 @@ it.skipIf(!runnable)("desk-reminders-mac refuses an unknown argument and a --lis
   expect(bare.code).toBe(2);
   expect(bare.lines).toEqual(["--list needs the name of a Reminders list."]);
 });
+
+it.skipIf(!runnable)("desk-reminders-mac refuses to combine an access check with a writer option", () => {
+  const result = refused("", ["--check-access", "--list", "Work"]);
+  expect(result.code).toBe(2);
+  expect(result.lines).toEqual(["desk-reminders-mac does not know the argument --check-access."]);
+});
