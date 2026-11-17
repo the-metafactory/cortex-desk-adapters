@@ -51,3 +51,33 @@ it.skipIf(!runnable)("desk-reminders-mac refuses an unknown argument and a --lis
   expect(bare.code).toBe(2);
   expect(bare.lines).toEqual(["--list needs the name of a Reminders list."]);
 });
+
+it.skipIf(!runnable)("desk-reminders-mac refuses to combine an access check with a writer option", () => {
+  const result = refused("", ["--check-access", "--list", "Work"]);
+  expect(result.code).toBe(2);
+  expect(result.lines).toEqual(["desk-reminders-mac does not know the argument --check-access."]);
+});
+
+it.skipIf(process.platform !== "darwin")("a standalone access check exits with the permission result before reading a request", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const fixture = await mkdtemp(join(tmpdir(), "reminders-access-"));
+  try {
+    const executable = join(fixture, "desk-reminders-mac");
+    const compiled = Bun.spawnSync(["swiftc", "-D", "REMINDERS_ACCESS_FIXTURE", "-o", executable,
+      join(import.meta.dir, "../mac/reminders.swift")], { env: { ...process.env, CLANG_MODULE_CACHE_PATH: join(fixture, "cache") } });
+    expect(compiled.exitCode).toBe(0);
+    for (const [grant, code] of [["granted", 0], ["denied", 3]] as const) {
+      const result = Bun.spawnSync([executable, "--check-access"], {
+        env: { ...process.env, REMINDERS_TEST_GRANT: grant },
+        stdin: Buffer.from("invalid writer request"),
+        timeout: 10_000,
+      });
+      expect(result.exitCode).toBe(code);
+      expect(result.stdout.toString()).toBe("");
+      if (code === 3) expect(result.stderr.toString()).toContain("System Settings");
+    }
+  } finally {
+    await rm(fixture, { recursive: true, force: true });
+  }
+}, 120_000);
