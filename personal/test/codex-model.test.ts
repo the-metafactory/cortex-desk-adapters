@@ -11,7 +11,7 @@ import { readTriageRequest } from "../src/triage";
 const runCodexJson: typeof nativeRun = (prompt, options) => nativeRun(prompt, options, async argv => argv);
 const ROOT = join(import.meta.dir, "..");
 const FLOW = join(ROOT, "flows", "desk-mail-triage.yaml");
-const request = () => readTriageRequest(JSON.stringify({ sourcePolicy: "cloud", mail: { id: "personal-1", account: "personal", sourceId: "personal-mail", from: { address: "ada@example.org" }, subject: "Garden gathering", receivedAt: "2026-11-06T09:00:00Z" }, meetings: [{ key: "cal:personal:1", sourceId: "personal-calendar", sourcePolicy: "cloud", title: "Garden gathering", start: "2026-11-07T12:00:00Z" }], notes: [{ id: "studio:personal", areas: ["personal"], sourcePolicy: "cloud", name: "Garden", text: "Bring seeds" }] }));
+const request = () => readTriageRequest(JSON.stringify({ messages: [{ role: "system", content: "Cortex classifies mail." }, { role: "user", content: "Read the supplied agenda." }], sourcePolicy: "cloud", mail: { id: "personal-1", account: "personal", sourceId: "personal-mail", from: { address: "ada@example.org" }, subject: "Garden gathering", receivedAt: "2026-11-06T09:00:00Z" }, meetings: [{ key: "cal:personal:1", sourceId: "personal-calendar", sourcePolicy: "cloud", title: "Garden gathering", start: "2026-11-07T12:00:00Z" }], notes: [{ id: "studio:personal", areas: ["personal"], sourcePolicy: "cloud", name: "Garden", text: "Bring seeds" }] }));
 
 describe("native Codex boundary", () => {
   it("disables independent context/tools and inherits only native auth environment", () => {

@@ -1,25 +1,15 @@
-import type { BalanceParentRequest, DeskParseKind, DeskParseRequest, DeskParseResult, ParseInput, ParseMessages } from "./contract";
+import { readDeskMessages } from "./desk-messages";
+import type { BalanceParentRequest, DeskParseKind, DeskParseRequest, DeskParseResult, ParseInput } from "./contract";
 import { isRecord } from "./guards";
 
 const KINDS: DeskParseKind[] = ["reminder", "note", "task", "goal", "calendar", "conversation"];
 const isText = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 const isIso = (v: unknown): v is string => isText(v) && /^\d{4}-\d{2}-\d{2}/.test(v) && Number.isFinite(Date.parse(v));
 
-function readMessages(body: unknown): ParseMessages {
-  const list = isRecord(body) ? body.messages : undefined;
-  if (!Array.isArray(list)) throw new Error("request needs messages");
-  const content = (role: string) => {
-    const found = list.find((m): m is { content: string } => isRecord(m) && m.role === role && isText(m.content));
-    if (found === undefined) throw new Error(`request messages need a ${role} message`);
-    return found.content;
-  };
-  return { system: content("system"), user: content("user") };
-}
-
 /** The parser's stdin, checked; throws on anything Cortex should not have sent. */
 export function readParseRequest(text: string): ParseInput {
   const body: unknown = JSON.parse(text);
-  const messages = readMessages(body);
+  const messages = readDeskMessages(body);
   return { ...readRequest(body), messages };
 }
 
