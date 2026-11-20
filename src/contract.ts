@@ -1,3 +1,4 @@
+import type { DeskMessages } from "./desk-messages";
 import type { AskKind, DeskMoveTarget, DeskSourceEvent, DeskSourceMail, DeskSourceSentMail, DeskWriteRequest, ParserRequest } from "./cortex-contract";
 
 /** The command contract types the adapters declare themselves. The SDK's own types and schemas come from `./cortex-contract`. */
@@ -59,7 +60,7 @@ export interface BalanceParentRequest {
 }
 
 /** The prompts Cortex writes for the parser: the system message and the user message, sent to the provider unchanged. */
-export type ParseMessages = { system: string; user: string };
+export type ParseMessages = DeskMessages;
 
 export type DeskParseRequest = DeskCreationParseRequest | BalanceParentRequest;
 /** What `desk-parse` reads from stdin: the request plus Cortex's prompts, as `messages: [{ role, content }]` on the wire. */

@@ -7,7 +7,8 @@ const ROOT = join(import.meta.dir, "..");
 const FLOW = join(ROOT, "flows/desk-mail-triage.yaml");
 const request = JSON.stringify({
   mail: { id: "current@example.org", from: { address: "ada@example.org" }, subject: "Agenda", firstParagraph: "Please reply.", receivedAt: "2026-11-06T08:00:00Z", account: "work" },
-  meetings: [], vips: [], unimportant: [], corrections: [],
+  messages: [{ role: "system", content: "Cortex classifies mail." }, { role: "user", content: "Read the supplied agenda." }],
+  meetings: [],
 });
 
 async function command(baseUrl: string, args: string[] = [], flow = FLOW) {
